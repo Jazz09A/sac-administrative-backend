@@ -209,7 +209,34 @@ Registra salida de visita.
 
 ### Dashboard
 #### GET `/api/v1/dashboard/advanced`
-Endpoint implementado en código, pero no está montado en el router principal actual.
+Dashboard avanzado con métricas del día consultado.
+
+Parámetros:
+- `target_date` (opcional, formato `YYYY-MM-DD`). Si no se envía, usa la fecha actual.
+
+**Respuesta 200 (estructura)**
+```json
+{
+  "date": "2026-04-17",
+  "totals": {
+    "entries": 24,
+    "in_waiting": 7,
+    "finished": 17
+  },
+  "comparison": {
+    "vs_previous_day_pct": 12.5
+  },
+  "latest_visits": [
+    {
+      "id": "49a5f2a5-889f-4739-bf38-b295d2df07ef",
+      "contributor_name": "Comercial ABC, C.A.",
+      "fiscal_id": 7,
+      "status": "espera",
+      "entry_time": "10:35:00"
+    }
+  ]
+}
+```
 
 ## Ejemplos rápidos con cURL
 
