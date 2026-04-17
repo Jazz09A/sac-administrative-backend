@@ -1,0 +1,158 @@
+{
+  "info": {
+    "name": "SAC Administrative API (local)",
+    "description": "FastAPI en `sac-administrative-backend`. Base: `{{baseUrl}}`.\n\n1. Levantar API: `uv run uvicorn main:app --reload --host 0.0.0.0 --port 8000` (requiere Python 3.13 + `.env` con Postgres).\n2. Probar primero **Health**, luego **Listar fiscales** para copiar un `id` a la variable `fiscal_id` antes de **POST visita**.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8000" },
+    { "key": "visit_id", "value": "" },
+    { "key": "fiscal_id", "value": "1" },
+    { "key": "contributor_id", "value": "1" }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "GET /health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/health"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "POST /api/v1/auth/login",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"admin\",\n  \"password\": \"admin\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/auth/login"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Contributors",
+      "item": [
+        {
+          "name": "GET /api/v1/contributors/",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/contributors/?skip=0&limit=100"
+          }
+        },
+        {
+          "name": "POST /api/v1/contributors/",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"rif\": \"J-12345678-9\",\n  \"name\": \"Comercial ABC, C.A.\",\n  \"type\": \"juridica\",\n  \"occupation\": \"Comercio\",\n  \"phone\": \"0412-5550000\",\n  \"email\": \"admin@abc.com\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/contributors/"
+          }
+        },
+        {
+          "name": "GET /api/v1/contributors/{id}",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/contributors/{{contributor_id}}"
+          }
+        },
+        {
+          "name": "PUT /api/v1/contributors/{id}",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"0412-5550001\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/contributors/{{contributor_id}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Fiscals",
+      "item": [
+        {
+          "name": "GET /api/v1/fiscals/",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/fiscals/?query=&limit=20"
+          }
+        },
+        {
+          "name": "POST /api/v1/fiscals/sync",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/fiscals/sync"
+          }
+        },
+        {
+          "name": "GET /api/v1/fiscals/sync/status",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/fiscals/sync/status"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Visits",
+      "item": [
+        {
+          "name": "POST /api/v1/visits/",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"contributor_name\": \"Comercial Prueba Postman\",\n  \"responsible_person\": \"Maria Fernanda Ruiz\",\n  \"fiscal_id\": \"{{fiscal_id}}\",\n  \"reason\": \"Entrega de expediente\",\n  \"observations\": \"Prueba desde Postman\",\n  \"department\": \"Fiscalizacion\",\n  \"file_number\": \"EXP-2026-00001\",\n  \"entry_date\": \"2026-04-17\",\n  \"entry_time\": \"10:35:00\",\n  \"signature_image_url\": null\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/visits/"
+          }
+        },
+        {
+          "name": "GET /api/v1/visits/",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/visits/?skip=0&limit=20"
+          }
+        },
+        {
+          "name": "GET /api/v1/visits/{visit_id}",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/visits/{{visit_id}}"
+          }
+        },
+        {
+          "name": "PATCH /api/v1/visits/{visit_id}/exit",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"exit_date\": \"2026-04-17\",\n  \"exit_time\": \"11:15:00\",\n  \"status\": \"finalizado\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/visits/{{visit_id}}/exit"
+          }
+        }
+      ]
+    }
+  ]
+}
