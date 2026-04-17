@@ -1,0 +1,60 @@
+{
+    "name": "Sistema Contribuyentes Backend",
+    "instructions": [
+      "**MANDATORIO:** Lee AGENTS.md y docs/architecture.md PRIMERO antes de cualquier cambio.",
+      "Sigue SOLID: SRP (crud solo DB), usa SQLModel/Pydantic tipados.",
+      "**uv only:** NUNCA pip/poetry. Comandos: uv add/sync/run.",
+      "Postgres async. Tests: pytest unit/integration, coverage >80%.",
+      "Endpoints: response_model tipado, Depends(get_db).",
+      "Cambios: Actualiza docs/*.md con fecha/módulos tocados.",
+      "Commits: git diff src/ tests/ antes push."
+    ],
+    "rules": {
+      "loadFiles": [
+        "AGENTS.md",
+        "docs/architecture.md",
+        "pyproject.toml",
+        "src/core/config.py"
+      ],
+      "versionControl": {
+        "commitMessage": "feat(crud): {description} [skip ci]\n\n{changes}\n\nMódulos: {modules}",
+        "autoTest": true,
+        "preCommitHooks": ["uv run ruff check --fix", "uv run pytest"]
+      },
+      "fileStructure": {
+        "ignore": ["**/__pycache__", ".venv", "uv.lock"],
+        "modules": {
+          "models": "SQLModel entities (Contributor, Visit)",
+          "crud": "Async CRUD funcs (get_by_rif)",
+          "api/v1": "APIRouters con Depends",
+          "core": "config.py, security.py"
+        }
+      }
+    },
+    "skills": {
+      "generate-crud": {
+        "prompt": "Crea crud/{entity}.py completo: get_list, get_by_id/rif, create, update. Usa AsyncSession. Tests en tests/test_crud_{entity}.py.",
+        "output": "src/crud/{entity}.py\ntests/test_crud_{entity}.py"
+      },
+      "generate-endpoint": {
+        "prompt": "Crea api/v1/{entity}.py: POST/GET/PUT/DELETE. response_model={EntityOut}. 200/201/404.",
+        "output": "src/api/v1/{entity}.py\ntests/test_api_v1_{entity}.py"
+      },
+      "add-migration": {
+        "prompt": "alembic revision --autogenerate -m '{msg}'. Revisa changes.",
+        "output": "alembic/versions/"
+      },
+      "test-run": "uv run pytest {path} --cov=src/crud --cov-report=term-missing"
+    },
+    "permissions": {
+      "filesystem": "read-write",
+      "commands": ["uv", "alembic", "pytest", "ruff"],
+      "git": true
+    },
+    "ui": {
+      "chat": {
+        "welcome": "¡Listo para MVP contribuyentes! ¿CRUD para contributors o visits?",
+        "sidebar": ["architecture.md", "AGENTS.md", "pyproject.toml"]
+      }
+    }
+  }
