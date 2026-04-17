@@ -3,8 +3,12 @@
 ## Arquitectura general
 - Framework: FastAPI + SQLModel/Pydantic
 - Base de datos: PostgreSQL (operativa) + MySQL/TiDB (fuente de fiscales)
-- Autenticación: deshabilitada en MVP (`REQUIRE_AUTH=False`)
-- Prefijo: `/api/v1`
+- Autenticación (MVP):
+  - Router montado en `/api/v1/auth` (ver sección **Auth**).
+  - `POST /api/v1/auth/login` valida credenciales contra la tabla `users` usando `person_id` (cedula) + `password`.
+  - Respuesta: JWT HS256 (`access_token`) y `refresh_token`.
+  - El flag `REQUIRE_AUTH` en configuración está reservado para cuando los demás endpoints exijan el token; hoy el login ya emite JWT, pero las rutas de negocio no lo obligan de forma centralizada.
+- Prefijo API: `/api/v1`
 
 ## Endpoints disponibles
 
@@ -17,6 +21,89 @@
   "version": "0.1.0"
 }
 ```
+
+---
+
+### Auth
+Rutas definidas en el router principal bajo prefijo `/auth` (tag `auth` en OpenAPI).
+
+#### POST `/api/v1/auth/login`
+Obtiene tokens para un administrador activo. Las credenciales se validan con la tabla `users` (`person_id` + password).
+
+**Body**
+```json
+{
+  "person_id": "19344555",
+  "password": "tu_contraseña"
+}
+```
+
+**Respuesta 200**
+```json
+{
+  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "refresh_token": "Jf5v6VE0y...token_urlsafe...",
+  "token_type": "bearer"
+}
+```
+
+**Errores**
+- `401`: usuario o contraseña incorrectos (`detail`: mensaje en español).
+- `401`: usuario inactivo.
+- `422`: cuerpo inválido (campos vacíos, longitud fuera de rango: `person_id` 1–20, `password` 1–256).
+
+**Uso del token**
+Para llamadas que en el futuro requieran autenticación, enviar cabecera:
+`Authorization: Bearer <access_token>`
+
+---
+
+### Users
+Rutas para administrar usuarios con rol administrador. El `id` es UUID4.
+
+#### POST `/api/v1/users/`
+Crea usuario administrador.
+
+**Body**
+```json
+{
+  "person_id": "19344555",
+  "full_name": "Juan Perez",
+  "email": "juan.perez@sac.gob.ve",
+  "password": "Admin2026Seguro",
+  "is_active": true
+}
+```
+
+**Respuesta 201**
+```json
+{
+  "id": "21dba487-264b-4f76-bb1a-38f6187ec4a0",
+  "person_id": "19344555",
+  "full_name": "Juan Perez",
+  "email": "juan.perez@sac.gob.ve",
+  "is_active": true,
+  "last_login_at": null,
+  "created_at": "2026-04-17T16:20:11.102000",
+  "updated_at": "2026-04-17T16:20:11.102000"
+}
+```
+
+**Errores**
+- `400`: cédula o email ya registrados.
+- `422`: datos inválidos (`password` min 8).
+
+#### GET `/api/v1/users/?skip=0&limit=100`
+Lista usuarios administradores.
+
+#### GET `/api/v1/users/{user_id}`
+Obtiene usuario por UUID.
+
+#### PUT `/api/v1/users/{user_id}`
+Actualiza `full_name`, `email`, `password` y/o `is_active`.
+
+#### DELETE `/api/v1/users/{user_id}`
+Elimina el usuario (hard delete).
 
 ---
 
@@ -240,17 +327,37 @@ Parámetros:
 
 ## Ejemplos rápidos con cURL
 
-### 1) Sincronizar fiscales
+### 1) Login (JWT)
+```bash
+curl -X POST "http://localhost:8000/api/v1/auth/login" \
+  -H "Content-Type: application/json" \
+  -d '{"person_id":"19344555","password":"tu_contraseña"}'
+```
+
+### 2) Crear usuario administrador
+```bash
+curl -X POST "http://localhost:8000/api/v1/users/" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "person_id": "19344555",
+    "full_name": "Juan Perez",
+    "email": "juan.perez@sac.gob.ve",
+    "password": "Admin2026Seguro",
+    "is_active": true
+  }'
+```
+
+### 3) Sincronizar fiscales
 ```bash
 curl -X POST "http://localhost:8000/api/v1/fiscals/sync"
 ```
 
-### 2) Buscar fiscales
+### 4) Buscar fiscales
 ```bash
 curl "http://localhost:8000/api/v1/fiscals?query=juan&limit=10"
 ```
 
-### 3) Crear visita (sin contributor_id en request)
+### 5) Crear visita (sin contributor_id en request)
 ```bash
 curl -X POST "http://localhost:8000/api/v1/visits/" \
   -H "Content-Type: application/json" \
@@ -265,6 +372,7 @@ curl -X POST "http://localhost:8000/api/v1/visits/" \
 ```
 
 ## Notas
-- Errores comunes: `422` (validación), `404` (no encontrado), `400` (regla de negocio).
+- Errores comunes: `422` (validación), `404` (no encontrado), `400` (regla de negocio), `401` (login inválido).
 - `visit_id` ahora es UUID.
+- En `/docs`, el flujo OAuth2 usa `tokenUrl` `POST /api/v1/auth/login` para obtener el bearer token en pruebas interactivas.
 - Última actualización de esta documentación: 2026-04-17.

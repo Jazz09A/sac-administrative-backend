@@ -4,8 +4,11 @@ JWT utilities (MVP: básico, activar con REQUIRE_AUTH).
 """
 from datetime import datetime, timedelta, timezone
 from typing import Optional
+import hashlib
+import secrets
+
+import bcrypt
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 from fastapi import Depends, HTTPException
 from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel
@@ -14,14 +17,13 @@ from .config import get_settings
 
 settings = get_settings()
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.API_V1_STR}/auth/login")
 
 class TokenData(BaseModel):
-    username: Optional[str] = None
+    person_id: Optional[str] = None
 
 class FuncionarioBase(BaseModel):
-    username: str
+    person_id: str
     # Future: role
 
 async def create_access_token(data: dict) -> str:
@@ -32,14 +34,43 @@ async def create_access_token(data: dict) -> str:
     encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm="HS256")
     return encoded_jwt
 
+
+def create_refresh_token(length: int = 64) -> str:
+    """Genera refresh token aleatorio URL-safe."""
+    return secrets.token_urlsafe(length)
+
+
+def _normalize_password_for_bcrypt(password: str) -> bytes:
+    """
+    Bcrypt only accepts up to 72 bytes.
+    For longer passwords, pre-hash with SHA-256 (hex) to keep deterministic verification.
+    """
+    raw = password.encode("utf-8")
+    if len(raw) <= 72:
+        return raw
+    return hashlib.sha256(raw).hexdigest().encode("utf-8")
+
+
+def hash_password(password: str) -> str:
+    """Genera hash bcrypt para contrasena."""
+    normalized = _normalize_password_for_bcrypt(password)
+    hashed = bcrypt.hashpw(normalized, bcrypt.gensalt(rounds=12))
+    return hashed.decode("utf-8")
+
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    """Valida contrasena en texto plano contra hash bcrypt."""
+    normalized = _normalize_password_for_bcrypt(plain_password)
+    return bcrypt.checkpw(normalized, hashed_password.encode("utf-8"))
+
 async def verify_token(token: str) -> Optional[FuncionarioBase]:
     """Verifica JWT (MVP: simple)."""
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
-        username: str = payload.get("sub")
-        if username is None:
+        person_id: str = payload.get("sub")
+        if person_id is None:
             return None
-        return FuncionarioBase(username=username)
+        return FuncionarioBase(person_id=person_id)
     except JWTError:
         return None
 

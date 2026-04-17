@@ -12,6 +12,7 @@ from .config import get_settings
 import src.models.contributor  # noqa: F401
 import src.models.fiscal  # noqa: F401
 import src.models.photo  # noqa: F401
+import src.models.user  # noqa: F401
 import src.models.visit  # noqa: F401
 
 settings = get_settings()
