@@ -1,4 +1,5 @@
 from datetime import date
+from typing import Any, List
 from uuid import UUID
 
 from src.domain.repositories.contributor_repository import ContributorRepository
@@ -80,3 +81,26 @@ class VisitService:
 
     async def register_exit(self, visit_id: UUID, exit_data: VisitUpdateExit) -> Visit | None:
         return await self.visit_repo.register_exit(visit_id, exit_data)
+
+    async def history(
+        self,
+        *,
+        rif: str | None = None,
+        contributor_name: str | None = None,
+        file_number: str | None = None,
+        department: str | None = None,
+        date_from: date | None = None,
+        date_to: date | None = None,
+        skip: int = 0,
+        limit: int = 100,
+    ) -> List[dict[str, Any]]:
+        return await self.visit_repo.list_history(
+            rif=rif,
+            contributor_name=contributor_name,
+            file_number=file_number,
+            department=department,
+            date_from=date_from,
+            date_to=date_to,
+            skip=skip,
+            limit=limit,
+        )

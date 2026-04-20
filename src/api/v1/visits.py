@@ -12,7 +12,7 @@ from src.core.database import get_db
 from src.infrastructure.postgres.contributor_postgres_repository import PostgresContributorRepository
 from src.infrastructure.postgres.fiscal_postgres_repository import PostgresFiscalRepository
 from src.infrastructure.postgres.visit_postgres_repository import PostgresVisitRepository
-from src.models.visit import VisitCreate, VisitPublic, VisitUpdateExit
+from src.models.visit import VisitCreate, VisitHistoryItem, VisitPublic, VisitUpdateExit
 from src.services.visit_service import VisitService
 
 router = APIRouter()
@@ -60,6 +60,36 @@ async def list_visits(
         limit=limit,
     )
     return [VisitPublic.model_validate(visit) for visit in visits]
+
+@router.get("/history", response_model=List[VisitHistoryItem])
+async def list_visit_history(
+    rif: str | None = None,
+    contribuyente: str | None = None,
+    registro: str | None = None,
+    departamento: str | None = None,
+    fecha_desde: date | None = None,
+    fecha_hasta: date | None = None,
+    skip: int = 0,
+    limit: int = 100,
+    db: AsyncSession = Depends(get_db)
+) -> List[VisitHistoryItem]:
+    """Historial con columnas para reporte administrativo."""
+    service = VisitService(
+        contributor_repo=PostgresContributorRepository(db),
+        fiscal_repo=PostgresFiscalRepository(db),
+        visit_repo=PostgresVisitRepository(db),
+    )
+    rows = await service.history(
+        rif=rif,
+        contributor_name=contribuyente,
+        file_number=registro,
+        department=departamento,
+        date_from=fecha_desde,
+        date_to=fecha_hasta,
+        skip=skip,
+        limit=limit,
+    )
+    return [VisitHistoryItem.model_validate(row) for row in rows]
 
 @router.get("/{visit_id}", response_model=VisitPublic)
 async def get_visit_detail(

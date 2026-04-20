@@ -1,4 +1,4 @@
-from typing import Protocol
+from typing import Any, List, Protocol
 from datetime import date
 from uuid import UUID
 
@@ -27,3 +27,17 @@ class VisitRepository(Protocol):
 
     async def register_exit(self, visit_id: UUID, exit_data: VisitUpdateExit) -> Visit | None:
         """Register visit exit."""
+
+    async def list_history(
+        self,
+        *,
+        rif: str | None = None,
+        contributor_name: str | None = None,
+        file_number: str | None = None,
+        department: str | None = None,
+        date_from: date | None = None,
+        date_to: date | None = None,
+        skip: int = 0,
+        limit: int = 100,
+    ) -> List[dict[str, Any]]:
+        """List visits history with report-friendly columns."""

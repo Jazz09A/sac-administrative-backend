@@ -1,4 +1,5 @@
 from datetime import date
+from typing import Any, List
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -43,7 +44,7 @@ class PostgresVisitRepository(VisitRepository):
         if fiscal_id:
             statement = statement.where(Visit.fiscal_id == fiscal_id)
         if rif:
-            statement = statement.join(Contributor).where(Contributor.rif == rif)
+            statement = statement.join(Contributor).where(Contributor.rif.ilike(f"%{rif}%"))
         if status:
             statement = statement.where(Visit.status == status)
         if entry_date:
@@ -64,3 +65,57 @@ class PostgresVisitRepository(VisitRepository):
         await self.session.flush()
         await self.session.refresh(visit)
         return visit
+
+    async def list_history(
+        self,
+        *,
+        rif: str | None = None,
+        contributor_name: str | None = None,
+        file_number: str | None = None,
+        department: str | None = None,
+        date_from: date | None = None,
+        date_to: date | None = None,
+        skip: int = 0,
+        limit: int = 100,
+    ) -> List[dict[str, Any]]:
+        statement = (
+            select(
+                Contributor.rif,
+                Contributor.name,
+                Visit.file_number,
+                Visit.department,
+                Visit.reason,
+                Visit.status,
+            )
+            .join(Contributor, Visit.contributor_id == Contributor.id)
+            .order_by(Visit.created_at.desc())
+        )
+        if rif:
+            statement = statement.where(Contributor.rif.ilike(f"%{rif}%"))
+        if contributor_name:
+            statement = statement.where(Contributor.name.ilike(f"%{contributor_name}%"))
+        if rif:
+            statement = statement.where(Contributor.rif.ilike(f"%{rif}%"))
+        if file_number:
+            statement = statement.where(Visit.file_number.ilike(f"%{file_number}%"))
+        if department:
+            statement = statement.where(Visit.department.ilike(f"%{department}%"))
+        if date_from:
+            statement = statement.where(Visit.entry_date >= date_from)
+        if date_to:
+            statement = statement.where(Visit.entry_date <= date_to)
+
+        statement = statement.offset(skip).limit(limit)
+        result = await self.session.execute(statement)
+        rows = result.all()
+        return [ 
+            {
+                "rif": row[0],
+                "contribuyente": row[1],
+                "registro": row[2],
+                "depto": row[3],
+                "motivo": row[4],
+                "estado": row[5],
+            }
+            for row in rows
+        ]

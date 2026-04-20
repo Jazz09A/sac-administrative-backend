@@ -59,6 +59,14 @@ class VisitPublic(VisitBase):
     status: VisitStatus = Field(default=VisitStatus.ESPERA)
     created_at: Optional[datetime] = None
 
+class VisitHistoryItem(SQLModel):
+    rif: str
+    contribuyente: str
+    registro: Optional[str] = None
+    depto: Optional[str] = None
+    motivo: str
+    estado: VisitStatus
+
 class Visit(VisitBase, table=True):  # type: ignore
     id: UUID = Field(default_factory=uuid4, primary_key=True)
     contributor_id: int = Field(foreign_key="contributor.id", index=True)

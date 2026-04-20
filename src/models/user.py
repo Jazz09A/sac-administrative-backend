@@ -36,8 +36,11 @@ class UserPublic(UserBase):
     id: Optional[UUID] = Field(default=None)
     last_login_at: Optional[datetime] = None
     created_at: Optional[datetime] = None
-    updated_at: Optional[datetime] = None
 
+
+# class ResponseUserCreate():
+#     id: UUID = Field(default=None)
+#     created_at:Optional[datetime]
 
 class UserLogin(SQLModel):
     person_id: str = PydanticField(..., min_length=1, max_length=20)

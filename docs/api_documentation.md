@@ -269,6 +269,41 @@ Parámetros disponibles:
 - `skip` (default `0`)
 - `limit` (default `100`)
 
+#### GET `/api/v1/visits/history?rif=J-123&contribuyente=Comercial&registro=EXP-2026&departamento=Fiscalizacion&fecha_desde=2026-04-01&fecha_hasta=2026-04-30`
+Historial de visitas para reporte administrativo.
+
+Columnas de respuesta:
+- `rif`
+- `contribuyente`
+- `registro`
+- `depto`
+- `motivo`
+- `estado`
+
+Filtros disponibles:
+- `rif` (búsqueda parcial, case-insensitive)
+- `contribuyente` (búsqueda parcial por nombre del contribuyente, case-insensitive)
+- `registro` (búsqueda parcial por número de expediente/registro, case-insensitive)
+- `departamento` (búsqueda parcial en departamento del contribuyente, case-insensitive)
+- `fecha_desde` (formato `YYYY-MM-DD`)
+- `fecha_hasta` (formato `YYYY-MM-DD`)
+- `skip` (default `0`)
+- `limit` (default `100`)
+
+**Respuesta 200 (estructura)**
+```json
+[
+  {
+    "rif": "J-12345678-9",
+    "contribuyente": "Comercial ABC, C.A.",
+    "registro": "EXP-2026-00045",
+    "depto": "Fiscalizacion",
+    "motivo": "Entrega de expediente de fiscalizacion",
+    "estado": "finalizado"
+  }
+]
+```
+
 #### GET `/api/v1/visits/{visit_id}`
 Obtiene visita por ID UUID.
 
