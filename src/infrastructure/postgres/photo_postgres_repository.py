@@ -1,3 +1,4 @@
+from typing import Optional
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,8 +12,24 @@ class PostgresPhotoRepository(PhotoRepository):
     def __init__(self, session: AsyncSession):
         self.session = session
 
-    async def create(self, visit_id: UUID, photo_url: str) -> Photo:
-        db_photo = Photo(visit_id=visit_id, photo_url=photo_url)
+    async def create(
+        self,
+        visit_id: UUID,
+        object_key: str,
+        *,
+        bucket: Optional[str] = None,
+        content_type: Optional[str] = None,
+        original_filename: Optional[str] = None,
+        size: Optional[int] = None,
+    ) -> Photo:
+        db_photo = Photo(
+            visit_id=visit_id,
+            object_key=object_key,
+            bucket=bucket,
+            content_type=content_type,
+            original_filename=original_filename,
+            size=size,
+        )
         self.session.add(db_photo)
         await self.session.flush()
         await self.session.refresh(db_photo)

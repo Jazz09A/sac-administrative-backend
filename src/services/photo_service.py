@@ -26,18 +26,27 @@ class PhotoService:
         file_data: bytes,
         filename: str,
         content_type: str,
+        bucket_name: str | None = None,
     ) -> Photo:
         self._validate_file(file_data=file_data, content_type=content_type)
 
         safe_name = Path(filename).name or "photo"
         object_key = f"{self.OBJECT_PREFIX}/{visit_id}/{uuid4()}_{safe_name}"
-        object_url = await self.storage_repo.upload(
+
+        returned_key = await self.storage_repo.upload(
             file_data=file_data,
             key=object_key,
             content_type=content_type,
         )
         try:
-            return await self.photo_repo.create(visit_id=visit_id, photo_url=object_url)
+            return await self.photo_repo.create(
+                visit_id=visit_id,
+                object_key=returned_key,
+                bucket=bucket_name,
+                content_type=content_type,
+                original_filename=safe_name,
+                size=len(file_data),
+            )
         except Exception:
             await self.storage_repo.delete(object_key)
             raise

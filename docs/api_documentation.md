@@ -288,6 +288,7 @@ Comportamiento de estados:
 - Si `incluir_finalizados=true`, también incluye visitas `finalizado`.
 
 Columnas de respuesta:
+- `id` (UUID de la visita)
 - `rif`
 - `contribuyente`
 - `registro`

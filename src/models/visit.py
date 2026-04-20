@@ -65,12 +65,14 @@ class VisitWithPhotosPublic(VisitPublic):
     photos: List[PhotoPublic] = []
 
 class VisitHistoryItem(SQLModel):
+    id: UUID
     rif: str
     contribuyente: str
     registro: Optional[str] = None
     depto: Optional[str] = None
     motivo: str
     estado: VisitStatus
+    fiscal: Optional[str] = None
 
 class Visit(VisitBase, table=True):  # type: ignore
     id: UUID = Field(default_factory=uuid4, primary_key=True)

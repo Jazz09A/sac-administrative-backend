@@ -3,10 +3,12 @@ from typing import Any, List
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 from sqlmodel import select
 
 from src.domain.repositories.visit_repository import VisitRepository
 from src.models.contributor import Contributor
+from src.models.fiscal import Fiscal
 from src.models.visit import Visit, VisitStatus, VisitUpdateExit
 
 
@@ -24,7 +26,11 @@ class PostgresVisitRepository(VisitRepository):
         return db_visit
 
     async def get(self, visit_id: UUID) -> Visit | None:
-        result = await self.session.execute(select(Visit).where(Visit.id == visit_id))
+        result = await self.session.execute(
+            select(Visit)
+            .options(selectinload(Visit.fiscal))
+            .where(Visit.id == visit_id)
+        )
         return result.scalar_one_or_none()
 
     async def list(
@@ -38,7 +44,7 @@ class PostgresVisitRepository(VisitRepository):
         skip: int = 0,
         limit: int = 100,
     ) -> list[Visit]:
-        statement = select(Visit)
+        statement = select(Visit).options(selectinload(Visit.fiscal))
         if contributor_id:
             statement = statement.where(Visit.contributor_id == contributor_id)
         if fiscal_id:
@@ -54,13 +60,25 @@ class PostgresVisitRepository(VisitRepository):
         return list(result.scalars().all())
 
     async def register_exit(self, visit_id: UUID, exit_data: VisitUpdateExit) -> Visit | None:
-        visit = await self.get(visit_id)
-        if not visit or visit.status != VisitStatus.ESPERA:
+        visit = await self.get(visit_id)  # ya usa selectinload(fiscal)
+        # Permitir registrar salida si está en ESPERA o ATENDIDO
+        if not visit or visit.status not in (VisitStatus.ESPERA, VisitStatus.ATENDIDO):
             return None
 
         visit.exit_date = exit_data.exit_date
         visit.exit_time = exit_data.exit_time
         visit.status = exit_data.status or VisitStatus.FINALIZADO
+        self.session.add(visit)
+        await self.session.flush()
+        await self.session.refresh(visit)
+        return visit
+
+    async def mark_as_attended(self, visit_id: UUID) -> Visit | None:
+        visit = await self.get(visit_id)  # ya usa selectinload(fiscal)
+        if not visit or visit.status != VisitStatus.ESPERA:
+            return None
+
+        visit.status = VisitStatus.ATENDIDO
         self.session.add(visit)
         await self.session.flush()
         await self.session.refresh(visit)
@@ -81,14 +99,17 @@ class PostgresVisitRepository(VisitRepository):
     ) -> List[dict[str, Any]]:
         statement = (
             select(
+                Visit.id,
                 Contributor.rif,
                 Contributor.name,
                 Visit.file_number,
                 Visit.department,
                 Visit.reason,
                 Visit.status,
+                Fiscal.name,
             )
             .join(Contributor, Visit.contributor_id == Contributor.id)
+            .outerjoin(Fiscal, Visit.fiscal_id == Fiscal.id)
             .order_by(Visit.created_at.desc())
         )
         if rif:
@@ -109,14 +130,16 @@ class PostgresVisitRepository(VisitRepository):
         statement = statement.offset(skip).limit(limit)
         result = await self.session.execute(statement)
         rows = result.all()
-        return [ 
+        return [
             {
-                "rif": row[0],
-                "contribuyente": row[1],
-                "registro": row[2],
-                "depto": row[3],
-                "motivo": row[4],
-                "estado": row[5],
+                "id": row[0],
+                "rif": row[1],
+                "contribuyente": row[2],
+                "registro": row[3],
+                "depto": row[4],
+                "motivo": row[5],
+                "estado": row[6],
+                "fiscal": row[7],
             }
             for row in rows
         ]

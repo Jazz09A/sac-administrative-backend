@@ -1,6 +1,5 @@
 import asyncio
 from io import BytesIO
-from urllib.parse import urlparse
 
 import boto3
 
@@ -30,6 +29,7 @@ class S3FileStorageRepository(FileStorageRepository):
         )
 
     async def upload(self, file_data: bytes, key: str, content_type: str) -> str:
+        """Upload file and return only the object key."""
         await asyncio.to_thread(
             self.client.upload_fileobj,
             BytesIO(file_data),
@@ -37,14 +37,8 @@ class S3FileStorageRepository(FileStorageRepository):
             key,
             ExtraArgs={"ContentType": content_type},
         )
-        return self._build_object_url(key)
+        return key
 
     async def delete(self, key: str) -> bool:
         await asyncio.to_thread(self.client.delete_object, Bucket=self.bucket_name, Key=key)
         return True
-
-    def _build_object_url(self, key: str) -> str:
-        parsed = urlparse(self.endpoint_url)
-        if parsed.scheme and parsed.netloc:
-            return f"{parsed.scheme}://{parsed.netloc}/{self.bucket_name}/{key}"
-        return f"{self.endpoint_url}/{self.bucket_name}/{key}"

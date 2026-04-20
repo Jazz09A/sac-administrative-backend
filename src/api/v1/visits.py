@@ -83,6 +83,8 @@ async def register_ingreso(
         ),
     )
 
+    public_base_url = settings.R2_PUBLIC_BASE_URL.rstrip("/")
+
     try:
         visit = await service.create(visit_in)
         file_data = await photo.read()
@@ -91,8 +93,12 @@ async def register_ingreso(
             file_data=file_data,
             filename=photo.filename,
             content_type=photo.content_type or "",
+            bucket_name=bucket_name,
         )
-        visit.signature_image_url = created_photo.photo_url
+        photo_url = (
+            f"{public_base_url}/{created_photo.object_key}" if public_base_url else created_photo.object_key
+        )
+        visit.signature_image_url = photo_url
         db.add(visit)
         await db.flush()
         await db.refresh(visit)
@@ -101,9 +107,12 @@ async def register_ingreso(
     finally:
         await photo.close()
 
+    photo_public = PhotoPublic.model_validate(created_photo)
+    photo_public.photo_url = photo_url
+
     return VisitWithPhotosPublic.model_validate(
         visit,
-        update={"photos": [PhotoPublic.model_validate(created_photo)]},
+        update={"photos": [photo_public]},
     )
 
 @router.get("/", response_model=List[VisitPublic])
@@ -132,7 +141,13 @@ async def list_visits(
         skip=skip,
         limit=limit,
     )
-    return [VisitPublic.model_validate(visit) for visit in visits]
+    return [
+        VisitPublic.model_validate(
+            visit,
+            update={"fiscal_name": visit.fiscal.name if visit.fiscal else None},
+        )
+        for visit in visits
+    ]
 
 @router.get("/history", response_model=List[VisitHistoryItem])
 async def list_visit_history(
@@ -142,12 +157,12 @@ async def list_visit_history(
     departamento: str | None = None,
     fecha_desde: date | None = None,
     fecha_hasta: date | None = None,
-    incluir_finalizados: bool = False,
+    incluir_finalizados: bool = True,
     skip: int = 0,
     limit: int = 100,
     db: AsyncSession = Depends(get_db)
 ) -> List[VisitHistoryItem]:
-    """Historial con columnas para reporte administrativo."""
+    """Historial con columnas para reporte administrativo. Muestra todas las visitas por defecto."""
     service = VisitService(
         contributor_repo=PostgresContributorRepository(db),
         fiscal_repo=PostgresFiscalRepository(db),
@@ -178,7 +193,28 @@ async def get_visit_detail(
     visit = await service.get(visit_id)
     if not visit:
         raise HTTPException(status_code=404, detail="Visita no encontrada")
-    return VisitPublic.model_validate(visit)
+    return VisitPublic.model_validate(
+        visit,
+        update={"fiscal_name": visit.fiscal.name if visit.fiscal else None},
+    )
+
+@router.patch("/{visit_id}/attend", response_model=VisitPublic)
+async def mark_visit_attended(
+    visit_id: UUID, db: AsyncSession = Depends(get_db)
+) -> VisitPublic:
+    """Marca la visita como atendida (solo si esta en espera)."""
+    service = VisitService(
+        contributor_repo=PostgresContributorRepository(db),
+        fiscal_repo=PostgresFiscalRepository(db),
+        visit_repo=PostgresVisitRepository(db),
+    )
+    visit = await service.mark_as_attended(visit_id)
+    if not visit:
+        raise HTTPException(status_code=400, detail="No se puede marcar como atendido. La visita debe estar en espera.")
+    return VisitPublic.model_validate(
+        visit,
+        update={"fiscal_name": visit.fiscal.name if visit.fiscal else None},
+    )
 
 @router.patch("/{visit_id}/exit", response_model=VisitPublic)
 async def register_salida(
@@ -193,4 +229,7 @@ async def register_salida(
     visit = await service.register_exit(visit_id, exit_data)
     if not visit:
         raise HTTPException(status_code=400, detail="No se puede registrar salida")
-    return VisitPublic.model_validate(visit)
+    return VisitPublic.model_validate(
+        visit,
+        update={"fiscal_name": visit.fiscal.name if visit.fiscal else None},
+    )

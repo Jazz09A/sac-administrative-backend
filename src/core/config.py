@@ -39,6 +39,9 @@ class Settings(BaseSettings):
     SECRET_ACCESS_KEY_S3: str = ""
     BUCKET_NAME_S3: str = ""
     S3_REGION: str = "auto"
+    # Base pública para construir URLs: custom domain o *.r2.dev
+    # URL final = R2_PUBLIC_BASE_URL + "/" + object_key
+    R2_PUBLIC_BASE_URL: str = ""
 
 @lru_cache()
 def get_settings() -> Settings:

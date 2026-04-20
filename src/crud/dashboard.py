@@ -85,6 +85,7 @@ async def get_advanced_dashboard(session: AsyncSession, target_date: Optional[da
     ultimas_result = await session.execute(ultimas)
     for visit, contrib in ultimas_result.all():
         result["ultimas_actividades"].append({
+            "id": str(visit.id),
             "motivo": visit.reason[:100],
             "contribuyente": contrib.name,
             "rif": contrib.rif,

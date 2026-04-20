@@ -82,6 +82,9 @@ class VisitService:
     async def register_exit(self, visit_id: UUID, exit_data: VisitUpdateExit) -> Visit | None:
         return await self.visit_repo.register_exit(visit_id, exit_data)
 
+    async def mark_as_attended(self, visit_id: UUID) -> Visit | None:
+        return await self.visit_repo.mark_as_attended(visit_id)
+
     async def history(
         self,
         *,
