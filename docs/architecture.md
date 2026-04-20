@@ -3,7 +3,7 @@
 ```markdown
 # Arquitectura del Backend - Sistema Contribuyentes MVP
 
-**Última modificación:** 2026-04-17 08:56 AM | **Cambios:** Init completa con ER, capas SOLID, flujos MVP. **Módulos tocados:** models/*, crud/*, api/v1/* (planificados).
+**Última modificación:** 2026-04-20 | **Cambios:** Historial de visitas con filtros parciales (`LIKE`) y visualización operativa de estados (`espera`/`atendido`). **Módulos tocados:** api/v1/visits.py, services/visit_service.py, infrastructure/postgres/visit_postgres_repository.py, docs/api_documentation.md.
 
 ## 1. Visión General
 Aplicación **FastAPI** modular siguiendo **SOLID** (SRP, OCP, LSP, ISP, DIP) para registro/control de contribuyentes. Enfoque hexagonal: entidades puras -> repositorios -> controllers. **Postgres** async, **uv** deps.
@@ -79,8 +79,11 @@ API (v1/visits.post) -> Depends(CRUD.create_visit) -> SQLModel.save -> 201 Visit
 | GET | `/contributors/{id}` | Detalle | `ContributorOut` |
 | POST | `/visits/` | Registro ingreso + foto | `VisitOut` |
 | GET | `/visits/` | Filtros rif/fecha/status | `List[VisitOut]` |
+| GET | `/visits/history` | Historial administrativo (RIF, contribuyente, registro, depto, motivo, estado) con filtros parciales y rango de fechas | `List[VisitHistoryItem]` |
 | PATCH | `/visits/{id}/exit` | Registra salida | `VisitOut` |
 | GET | `/dashboard/summary` | Métricas día (totales, en espera) | `DashboardSummary` |
+
+**Regla operativa de estados en historial:** por defecto el historial lista solo visitas en `espera` y `atendido`; las `finalizado` se incluyen solo cuando el cliente envía `incluir_finalizados=true`.
 
 **Autenticación:** JWT básico (funcionario), rol en future.
 
@@ -95,7 +98,7 @@ API (v1/visits.post) -> Depends(CRUD.create_visit) -> SQLModel.save -> 201 Visit
 - **CI/CD**: GitHub Actions (uv sync -> test -> deploy Render).
 - **Monitoring**: Prometheus? Future.
 
-**Próximo cambio esperado:** Implement models -> actualizar este doc + fecha/módulos.
+**Próximo cambio esperado:** formalizar transición de estados en endpoint dedicado de atención (paso a `atendido`) y desacoplar cierre administrativo (`finalizado`).
 ```
 
 Este architecture.md es **referencia viva**: edítalo **siempre** post-cambio (ej. "2026-04-18 | Añadí auth. Módulos: core/security.py").

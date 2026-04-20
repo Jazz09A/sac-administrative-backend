@@ -56,13 +56,19 @@ class PostgresFiscalRepository(FiscalRepository):
         await self.session.flush()
         return inserted, updated
 
-    async def search(self, query: str | None = None, limit: int = 100) -> list[Fiscal]:
-        statement = select(Fiscal).where(Fiscal.status.is_(True)).order_by(Fiscal.name.asc()).limit(limit)
+    async def search(
+        self,
+        query: str | None = None,
+        skip: int = 0,
+        limit: int = 100,
+    ) -> list[Fiscal]:
+        statement = select(Fiscal).where(Fiscal.status.is_(True))
         if query:
             like_query = f"%{query.strip()}%"
             statement = statement.where(
                 or_(Fiscal.name.ilike(like_query), Fiscal.external_id.ilike(like_query))
             )
+        statement = statement.order_by(Fiscal.name.asc()).offset(skip).limit(limit)
 
         result = await self.session.execute(statement)
         return list(result.scalars().all())

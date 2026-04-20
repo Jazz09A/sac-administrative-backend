@@ -9,6 +9,8 @@ from datetime import date, datetime, time
 from enum import Enum
 from uuid import UUID, uuid4
 
+from src.models.photo import PhotoPublic
+
 class VisitStatus(str, Enum):
     """Flujo MVP."""
     ESPERA = "espera"
@@ -58,6 +60,9 @@ class VisitPublic(VisitBase):
     exit_time: Optional[time] = None
     status: VisitStatus = Field(default=VisitStatus.ESPERA)
     created_at: Optional[datetime] = None
+
+class VisitWithPhotosPublic(VisitPublic):
+    photos: List[PhotoPublic] = []
 
 class VisitHistoryItem(SQLModel):
     rif: str

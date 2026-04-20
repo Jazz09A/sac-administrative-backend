@@ -149,8 +149,13 @@ Actualiza contribuyente.
 ---
 
 ### Fiscals
-#### GET `/api/v1/fiscals/?query=juan&limit=20`
+#### GET `/api/v1/fiscals/?query=juan&skip=0&limit=20`
 Busca fiscales desde la copia local en PostgreSQL.
+
+Parámetros disponibles:
+- `query` (opcional, búsqueda parcial por nombre o `external_id`)
+- `skip` (opcional, default `0`)
+- `limit` (opcional, default `100`)
 
 **Respuesta 200**
 ```json
@@ -219,21 +224,19 @@ El request usa `contributor_name` y el backend:
 #### POST `/api/v1/visits/`
 Registrar ingreso.
 
-**Body real de ejemplo**
-```json
-{
-  "contributor_name": "Comercial ABC, C.A.",
-  "responsible_person": "Maria Fernanda Ruiz",
-  "fiscal_id": 7,
-  "reason": "Entrega de expediente de fiscalizacion",
-  "observations": "Trajo anexos completos",
-  "department": "Fiscalizacion",
-  "file_number": "EXP-2026-00045",
-  "entry_date": "2026-04-17",
-  "entry_time": "10:35:00",
-  "signature_image_url": null
-}
-```
+`Content-Type`: `multipart/form-data`
+
+Campos de formulario:
+- `contributor_name` (texto, requerido)
+- `responsible_person` (texto, requerido)
+- `fiscal_id` (texto, requerido; acepta id local o external_id)
+- `reason` (texto, requerido)
+- `observations` (texto, opcional)
+- `department` (texto, opcional)
+- `file_number` (texto, opcional)
+- `entry_date` (`YYYY-MM-DD`, requerido)
+- `entry_time` (`HH:MM:SS`, requerido)
+- `photo` (archivo, requerido; `image/jpeg`, `image/png`, `image/webp`)
 
 **Respuesta 201 real (formato)**
 ```json
@@ -247,13 +250,21 @@ Registrar ingreso.
   "file_number": "EXP-2026-00045",
   "entry_date": "2026-04-17",
   "entry_time": "10:35:00",
-  "signature_image_url": null,
+  "signature_image_url": "https://<accountid>.r2.cloudflarestorage.com/<bucket>/sac-administrative/sac-visits/49a5f2a5-889f-4739-bf38-b295d2df07ef/3f8d4e56-....png",
   "id": "49a5f2a5-889f-4739-bf38-b295d2df07ef",
   "fiscal_name": null,
   "exit_date": null,
   "exit_time": null,
   "status": "espera",
-  "created_at": "2026-04-17T14:35:00.512000"
+  "created_at": "2026-04-17T14:35:00.512000",
+  "photos": [
+    {
+      "visit_id": "49a5f2a5-889f-4739-bf38-b295d2df07ef",
+      "photo_url": "https://<accountid>.r2.cloudflarestorage.com/<bucket>/sac-administrative/sac-visits/49a5f2a5-889f-4739-bf38-b295d2df07ef/3f8d4e56-....png",
+      "id": 31,
+      "created_at": "2026-04-20T15:02:10.000000"
+    }
+  ]
 }
 ```
 
@@ -269,8 +280,12 @@ Parámetros disponibles:
 - `skip` (default `0`)
 - `limit` (default `100`)
 
-#### GET `/api/v1/visits/history?rif=J-123&contribuyente=Comercial&registro=EXP-2026&departamento=Fiscalizacion&fecha_desde=2026-04-01&fecha_hasta=2026-04-30`
+#### GET `/api/v1/visits/history?rif=J-123&contribuyente=Comercial&registro=EXP-2026&departamento=Fiscalizacion&fecha_desde=2026-04-01&fecha_hasta=2026-04-30&incluir_finalizados=false`
 Historial de visitas para reporte administrativo.
+
+Comportamiento de estados:
+- Por defecto (`incluir_finalizados=false`) solo devuelve `espera` y `atendido`.
+- Si `incluir_finalizados=true`, también incluye visitas `finalizado`.
 
 Columnas de respuesta:
 - `rif`
@@ -287,6 +302,7 @@ Filtros disponibles:
 - `departamento` (búsqueda parcial en departamento del contribuyente, case-insensitive)
 - `fecha_desde` (formato `YYYY-MM-DD`)
 - `fecha_hasta` (formato `YYYY-MM-DD`)
+- `incluir_finalizados` (opcional, default `false`)
 - `skip` (default `0`)
 - `limit` (default `100`)
 
@@ -299,7 +315,7 @@ Filtros disponibles:
     "registro": "EXP-2026-00045",
     "depto": "Fiscalizacion",
     "motivo": "Entrega de expediente de fiscalizacion",
-    "estado": "finalizado"
+    "estado": "atendido"
   }
 ]
 ```
@@ -395,19 +411,17 @@ curl "http://localhost:8000/api/v1/fiscals?query=juan&limit=10"
 ### 5) Crear visita (sin contributor_id en request)
 ```bash
 curl -X POST "http://localhost:8000/api/v1/visits/" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "contributor_name": "Comercial ABC, C.A.",
-    "responsible_person": "Maria Fernanda Ruiz",
-    "fiscal_id": 7,
-    "reason": "Entrega de expediente de fiscalizacion",
-    "entry_date": "2026-04-17",
-    "entry_time": "10:35:00"
-  }'
+  -F "contributor_name=Comercial ABC, C.A." \
+  -F "responsible_person=Maria Fernanda Ruiz" \
+  -F "fiscal_id=7" \
+  -F "reason=Entrega de expediente de fiscalizacion" \
+  -F "entry_date=2026-04-17" \
+  -F "entry_time=10:35:00" \
+  -F "photo=@C:/ruta/imagen.png"
 ```
 
 ## Notas
 - Errores comunes: `422` (validación), `404` (no encontrado), `400` (regla de negocio), `401` (login inválido).
 - `visit_id` ahora es UUID.
 - En `/docs`, el flujo OAuth2 usa `tokenUrl` `POST /api/v1/auth/login` para obtener el bearer token en pruebas interactivas.
-- Última actualización de esta documentación: 2026-04-17.
+- Última actualización de esta documentación: 2026-04-20.

@@ -12,8 +12,13 @@ class FiscalQueryService:
         self.fiscal_repo = fiscal_repo
         self.sync_run_repo = sync_run_repo
 
-    async def search(self, query: str | None = None, limit: int = 100) -> list[Fiscal]:
-        return await self.fiscal_repo.search(query=query, limit=limit)
+    async def search(
+        self,
+        query: str | None = None,
+        skip: int = 0,
+        limit: int = 100,
+    ) -> list[Fiscal]:
+        return await self.fiscal_repo.search(query=query, skip=skip, limit=limit)
 
     async def get_sync_status(self) -> FiscalSyncRun | None:
         return await self.sync_run_repo.get_last_run()

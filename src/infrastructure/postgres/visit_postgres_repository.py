@@ -75,6 +75,7 @@ class PostgresVisitRepository(VisitRepository):
         department: str | None = None,
         date_from: date | None = None,
         date_to: date | None = None,
+        status_list: List[VisitStatus] | None = None,
         skip: int = 0,
         limit: int = 100,
     ) -> List[dict[str, Any]]:
@@ -94,8 +95,6 @@ class PostgresVisitRepository(VisitRepository):
             statement = statement.where(Contributor.rif.ilike(f"%{rif}%"))
         if contributor_name:
             statement = statement.where(Contributor.name.ilike(f"%{contributor_name}%"))
-        if rif:
-            statement = statement.where(Contributor.rif.ilike(f"%{rif}%"))
         if file_number:
             statement = statement.where(Visit.file_number.ilike(f"%{file_number}%"))
         if department:
@@ -104,6 +103,8 @@ class PostgresVisitRepository(VisitRepository):
             statement = statement.where(Visit.entry_date >= date_from)
         if date_to:
             statement = statement.where(Visit.entry_date <= date_to)
+        if status_list:
+            statement = statement.where(Visit.status.in_(status_list))
 
         statement = statement.offset(skip).limit(limit)
         result = await self.session.execute(statement)

@@ -7,7 +7,12 @@ class FiscalRepository(Protocol):
     async def upsert_many(self, fiscals: list[dict]) -> tuple[int, int]:
         """Upsert fiscals and return inserted, updated totals."""
 
-    async def search(self, query: str | None = None, limit: int = 100) -> list[Fiscal]:
+    async def search(
+        self,
+        query: str | None = None,
+        skip: int = 0,
+        limit: int = 100,
+    ) -> list[Fiscal]:
         """Search local fiscals cache."""
 
     async def get_by_id(self, fiscal_id: int) -> Fiscal | None:

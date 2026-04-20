@@ -18,13 +18,14 @@ router = APIRouter()
 @router.get("/", response_model=list[FiscalPublic])
 async def search_fiscals(
     query: str | None = None,
+    skip: int = 0,
     limit: int = 100,
     db: AsyncSession = Depends(get_db),
 ) -> list[FiscalPublic]:
     fiscal_repo = PostgresFiscalRepository(db)
     sync_run_repo = PostgresFiscalSyncRunRepository(db)
     service = FiscalQueryService(fiscal_repo, sync_run_repo)
-    fiscals = await service.search(query=query, limit=limit)
+    fiscals = await service.search(query=query, skip=skip, limit=limit)
     return [FiscalPublic.model_validate(fiscal) for fiscal in fiscals]
 
 

@@ -32,6 +32,14 @@ class Settings(BaseSettings):
     # Feature flags MVP
     REQUIRE_AUTH: bool = False  # Future JWT
 
+    # Cloud storage (Cloudflare R2 / S3 compatible)
+    URL_BUCKET_S3: str = ""
+    ACCESS_KEY_S3: str = ""
+    TOKEN_VALUE_S3: str = ""
+    SECRET_ACCESS_KEY_S3: str = ""
+    BUCKET_NAME_S3: str = ""
+    S3_REGION: str = "auto"
+
 @lru_cache()
 def get_settings() -> Settings:
     return Settings()

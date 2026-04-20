@@ -5,7 +5,7 @@ from uuid import UUID
 from src.domain.repositories.contributor_repository import ContributorRepository
 from src.domain.repositories.fiscal_repository import FiscalRepository
 from src.domain.repositories.visit_repository import VisitRepository
-from src.models.visit import Visit, VisitCreate, VisitUpdateExit
+from src.models.visit import Visit, VisitCreate, VisitStatus, VisitUpdateExit
 
 
 class VisitService:
@@ -91,6 +91,7 @@ class VisitService:
         department: str | None = None,
         date_from: date | None = None,
         date_to: date | None = None,
+        status_list: List[VisitStatus] | None = None,
         skip: int = 0,
         limit: int = 100,
     ) -> List[dict[str, Any]]:
@@ -101,6 +102,7 @@ class VisitService:
             department=department,
             date_from=date_from,
             date_to=date_to,
+            status_list=status_list,
             skip=skip,
             limit=limit,
         )

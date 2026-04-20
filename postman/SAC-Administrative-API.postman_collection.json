@@ -91,7 +91,7 @@
           "name": "GET /api/v1/fiscals/",
           "request": {
             "method": "GET",
-            "url": "{{baseUrl}}/api/v1/fiscals/?query=&limit=20"
+            "url": "{{baseUrl}}/api/v1/fiscals/?query=&skip=0&limit=20"
           }
         },
         {
@@ -118,10 +118,21 @@
           "name": "POST /api/v1/visits/",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [],
             "body": {
-              "mode": "raw",
-              "raw": "{\n  \"contributor_name\": \"Comercial Prueba Postman\",\n  \"responsible_person\": \"Maria Fernanda Ruiz\",\n  \"fiscal_id\": \"{{fiscal_id}}\",\n  \"reason\": \"Entrega de expediente\",\n  \"observations\": \"Prueba desde Postman\",\n  \"department\": \"Fiscalizacion\",\n  \"file_number\": \"EXP-2026-00001\",\n  \"entry_date\": \"2026-04-17\",\n  \"entry_time\": \"10:35:00\",\n  \"signature_image_url\": null\n}"
+              "mode": "formdata",
+              "formdata": [
+                { "key": "contributor_name", "value": "Comercial Prueba Postman", "type": "text" },
+                { "key": "responsible_person", "value": "Maria Fernanda Ruiz", "type": "text" },
+                { "key": "fiscal_id", "value": "{{fiscal_id}}", "type": "text" },
+                { "key": "reason", "value": "Entrega de expediente", "type": "text" },
+                { "key": "observations", "value": "Prueba desde Postman", "type": "text" },
+                { "key": "department", "value": "Fiscalizacion", "type": "text" },
+                { "key": "file_number", "value": "EXP-2026-00001", "type": "text" },
+                { "key": "entry_date", "value": "2026-04-17", "type": "text" },
+                { "key": "entry_time", "value": "10:35:00", "type": "text" },
+                { "key": "photo", "type": "file", "src": "" }
+              ]
             },
             "url": "{{baseUrl}}/api/v1/visits/"
           }
@@ -131,6 +142,13 @@
           "request": {
             "method": "GET",
             "url": "{{baseUrl}}/api/v1/visits/?skip=0&limit=20"
+          }
+        },
+        {
+          "name": "GET /api/v1/visits/history",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/visits/history?rif=&contribuyente=&registro=&departamento=&fecha_desde=&fecha_hasta=&incluir_finalizados=false&skip=0&limit=20"
           }
         },
         {

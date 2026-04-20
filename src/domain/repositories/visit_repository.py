@@ -2,7 +2,7 @@ from typing import Any, List, Protocol
 from datetime import date
 from uuid import UUID
 
-from src.models.visit import Visit, VisitUpdateExit
+from src.models.visit import Visit, VisitStatus, VisitUpdateExit
 
 
 class VisitRepository(Protocol):
@@ -37,6 +37,7 @@ class VisitRepository(Protocol):
         department: str | None = None,
         date_from: date | None = None,
         date_to: date | None = None,
+        status_list: List[VisitStatus] | None = None,
         skip: int = 0,
         limit: int = 100,
     ) -> List[dict[str, Any]]:
