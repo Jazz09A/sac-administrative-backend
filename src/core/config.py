@@ -10,9 +10,9 @@ class Settings(BaseSettings):
         env_file=".env", env_ignore_empty=True, extra="ignore"
     )
     
-    # Database
-    DATABASE_URL: str = "postgresql+asyncpg://postgres:Seniat2026$@localhost:5432/sac-administrative-development"
-    MYSQL_DATABASE_URL: str = "mysql+asyncmy://nEyKV8sWBL1LVH1.root:CaxbMMZ10VoSgZaz@gateway01.eu-central-1.prod.aws.tidbcloud.com:4000/development_sac?sslaccept=strict&connection_limit=100&pool_timeout=20"
+    # Database (from .env)
+    DATABASE_URL: str
+    MYSQL_DATABASE_URL: str
     MYSQL_REQUIRE_SSL: bool = True
     FISCAL_SYNC_BATCH_SIZE: int = 500
     
@@ -43,6 +43,8 @@ class Settings(BaseSettings):
     # URL final = R2_PUBLIC_BASE_URL + "/" + object_key
     R2_PUBLIC_BASE_URL: str = ""
 
+    # CORS (from .env - formato JSON: ["http://localhost:3000","https://miapp.com"])
+    ALLOWED_ORIGINS: list[str]
 @lru_cache()
 def get_settings() -> Settings:
     return Settings()

@@ -63,8 +63,10 @@ async def get_advanced_dashboard(session: AsyncSession, target_date: Optional[da
     }
     
     # 4-5. Visitas atendidas/pendientes hoy
-    atendidas = select(func.count()).where(today_filter, Visit.status.in_(["atendido", "finalizado"]))
-    pendientes = select(func.count()).where(today_filter, Visit.status.in_(["espera", "reprogramado"]))
+    # visitas_atendidas = TOTAL de visitas del día (todas las que ingresaron hoy)
+    # visitas_pendientes = las que aún están en espera
+    atendidas = select(func.count()).where(today_filter)
+    pendientes = select(func.count()).where(today_filter, Visit.status == VisitStatus.ESPERA)
     
     # 6. Últimas 5 visitas (recientes hoy)
     ultimas = select(Visit, Contributor).join(Contributor).where(

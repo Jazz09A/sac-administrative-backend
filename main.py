@@ -36,7 +36,7 @@ app = FastAPI(
 # CORS (frontend React)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:5173"],  # Vite/React dev
+    allow_origins=["http://localhost:3000", "http://localhost:5173", "https://sac-app.com", "https://sac-app.com/*", "https://pope-daily-meet-atmospheric.trycloudflare.com/"],  # Vite/React dev
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
