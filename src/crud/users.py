@@ -39,6 +39,7 @@ async def create_user(session: AsyncSession, user_in: UserCreate) -> User:
         full_name=user_in.full_name.strip(),
         email=user_in.email.strip().lower() if user_in.email else None,
         is_active=user_in.is_active,
+        role=user_in.role or "user",
         hashed_password=hash_password(user_in.password),
     )
     session.add(db_user)
@@ -64,6 +65,8 @@ async def update_user(
         payload["email"] = payload["email"].strip().lower()
     if "full_name" in payload and payload["full_name"] is not None:
         payload["full_name"] = payload["full_name"].strip()
+    if "role" in payload and payload["role"] is not None:
+        payload["role"] = payload["role"].strip().lower()
 
     for field, value in payload.items():
         setattr(user, field, value)

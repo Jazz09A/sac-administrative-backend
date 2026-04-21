@@ -52,6 +52,27 @@ Obtiene tokens para un administrador activo. Las credenciales se validan con la 
 - `401`: usuario inactivo.
 - `422`: cuerpo inválido (campos vacíos, longitud fuera de rango: `person_id` 1–20, `password` 1–256).
 
+#### GET `/api/v1/auth/me`
+Obtiene los datos del usuario autenticado. Requiere token JWT válido.
+
+**Headers**
+```
+Authorization: Bearer <access_token>
+```
+
+**Respuesta 200**
+```json
+{
+  "fullName": "Administrador del Sistema",
+  "role": "admin",
+  "username": "29675079"
+}
+```
+
+**Errores**
+- `401`: token inválido o no proporcionado.
+- `404`: usuario no encontrado.
+
 **Uso del token**
 Para llamadas que en el futuro requieran autenticación, enviar cabecera:
 `Authorization: Bearer <access_token>`
@@ -59,7 +80,7 @@ Para llamadas que en el futuro requieran autenticación, enviar cabecera:
 ---
 
 ### Users
-Rutas para administrar usuarios con rol administrador. El `id` es UUID4.
+Rutas para administrar usuarios con roles (`admin` o `user`). El `id` es UUID4.
 
 #### POST `/api/v1/users/`
 Crea usuario administrador.
@@ -71,7 +92,8 @@ Crea usuario administrador.
   "full_name": "Juan Perez",
   "email": "juan.perez@sac.gob.ve",
   "password": "Admin2026Seguro",
-  "is_active": true
+  "is_active": true,
+  "role": "admin"
 }
 ```
 
@@ -83,6 +105,7 @@ Crea usuario administrador.
   "full_name": "Juan Perez",
   "email": "juan.perez@sac.gob.ve",
   "is_active": true,
+  "role": "admin",
   "last_login_at": null,
   "created_at": "2026-04-17T16:20:11.102000",
   "updated_at": "2026-04-17T16:20:11.102000"
@@ -100,7 +123,7 @@ Lista usuarios administradores.
 Obtiene usuario por UUID.
 
 #### PUT `/api/v1/users/{user_id}`
-Actualiza `full_name`, `email`, `password` y/o `is_active`.
+Actualiza `full_name`, `email`, `password`, `is_active` y/o `role`.
 
 #### DELETE `/api/v1/users/{user_id}`
 Elimina el usuario (hard delete).
@@ -386,7 +409,22 @@ curl -X POST "http://localhost:8000/api/v1/auth/login" \
   -d '{"person_id":"19344555","password":"tu_contraseña"}'
 ```
 
-### 2) Crear usuario administrador
+### 2) Obtener datos del usuario autenticado (/me)
+```bash
+curl -X GET "http://localhost:8000/api/v1/auth/me" \
+  -H "Authorization: Bearer <access_token>"
+```
+
+**Respuesta:**
+```json
+{
+  "fullName": "Administrador del Sistema",
+  "role": "admin",
+  "username": "29675079"
+}
+```
+
+### 3) Crear usuario administrador
 ```bash
 curl -X POST "http://localhost:8000/api/v1/users/" \
   -H "Content-Type: application/json" \
@@ -395,21 +433,24 @@ curl -X POST "http://localhost:8000/api/v1/users/" \
     "full_name": "Juan Perez",
     "email": "juan.perez@sac.gob.ve",
     "password": "Admin2026Seguro",
-    "is_active": true
+    "is_active": true,
+    "role": "admin"
   }'
 ```
 
-### 3) Sincronizar fiscales
+**Nota:** El campo `role` acepta valores `"admin"` o `"user"` (default: `"user"`).
+
+### 4) Sincronizar fiscales
 ```bash
 curl -X POST "http://localhost:8000/api/v1/fiscals/sync"
 ```
 
-### 4) Buscar fiscales
+### 5) Buscar fiscales
 ```bash
 curl "http://localhost:8000/api/v1/fiscals?query=juan&limit=10"
 ```
 
-### 5) Crear visita (sin contributor_id en request)
+### 6) Crear visita (sin contributor_id en request)
 ```bash
 curl -X POST "http://localhost:8000/api/v1/visits/" \
   -F "contributor_name=Comercial ABC, C.A." \
@@ -425,4 +466,7 @@ curl -X POST "http://localhost:8000/api/v1/visits/" \
 - Errores comunes: `422` (validación), `404` (no encontrado), `400` (regla de negocio), `401` (login inválido).
 - `visit_id` ahora es UUID.
 - En `/docs`, el flujo OAuth2 usa `tokenUrl` `POST /api/v1/auth/login` para obtener el bearer token en pruebas interactivas.
-- Última actualización de esta documentación: 2026-04-20.
+- Última actualización de esta documentación: 2026-04-21.
+- **Cambios recientes:**
+  - Agregado campo `role` en modelo `User` (valores: `admin`, `user`).
+  - Nuevo endpoint `GET /api/v1/auth/me` para obtener datos del usuario autenticado.

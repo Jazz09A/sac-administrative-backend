@@ -26,8 +26,9 @@ class Settings(BaseSettings):
     API_V1_STR: str = "/api/v1"
     
     # Auth MVP (login operador)
-    AUTH_USERNAME: str = "admin"
-    AUTH_PASSWORD: str = "admin"
+    AUTH_PERSON_ID: str 
+    AUTH_PASSWORD: str 
+    ADMIN_EMAIL: str 
 
     # Feature flags MVP
     REQUIRE_AUTH: bool = False  # Future JWT

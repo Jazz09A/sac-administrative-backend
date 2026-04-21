@@ -3,7 +3,7 @@
 ```markdown
 # Arquitectura del Backend - Sistema Contribuyentes MVP
 
-**Última modificación:** 2026-04-20 | **Cambios:** Historial de visitas con filtros parciales (`LIKE`) y visualización operativa de estados (`espera`/`atendido`). **Módulos tocados:** api/v1/visits.py, services/visit_service.py, infrastructure/postgres/visit_postgres_repository.py, docs/api_documentation.md.
+**Última modificación:** 2026-04-21 | **Cambios:** Agregado campo `role` en tabla `users` y nuevo endpoint `GET /auth/me`. Migration: `4457b74aa740_add_users_table_with_role.py`. **Módulos tocados:** `src/models/user.py`, `alembic/env.py`, `src/api/v1/auth.py`, `docs/api_documentation.md`.
 
 ## 1. Visión General
 Aplicación **FastAPI** modular siguiendo **SOLID** (SRP, OCP, LSP, ISP, DIP) para registro/control de contribuyentes. Enfoque hexagonal: entidades puras -> repositorios -> controllers. **Postgres** async, **uv** deps.
@@ -14,6 +14,18 @@ Aplicación **FastAPI** modular siguiendo **SOLID** (SRP, OCP, LSP, ISP, DIP) pa
 
 ```mermaid
 erDiagram
+    USERS {
+        uuid id PK
+        varchar person_id UNIQUE
+        varchar full_name
+        varchar email UNIQUE
+        varchar hashed_password
+        varchar role "admin|user"
+        boolean is_active
+        timestamp last_login_at
+        timestamp created_at
+        timestamp updated_at
+    }
     CONTRIBUTORS {
         uuid id PK
         varchar rif UNIQUE
@@ -49,6 +61,7 @@ erDiagram
         timestamp created_at
     }
 
+    USERS ||--o{ VISITS : "registra"
     CONTRIBUTORS ||--o{ VISITS : "tiene"
     VISITS ||--o{ PHOTOS : "evidencia"
 ```
@@ -74,6 +87,13 @@ API (v1/visits.post) -> Depends(CRUD.create_visit) -> SQLModel.save -> 201 Visit
 
 | Método | Endpoint | Descripción | Response |
 |--------|----------|-------------|----------|
+| POST | `/auth/login` | Login JWT (person_id + password) | `TokenResponse` |
+| GET | `/auth/me` | Datos del usuario autenticado | `MeResponse` |
+| POST | `/users/` | Crea usuario (admin/user) | `UserPublic` |
+| GET | `/users/` | Lista usuarios | `List[UserPublic]` |
+| GET | `/users/{id}` | Detalle usuario | `UserPublic` |
+| PUT | `/users/{id}` | Actualiza usuario (incluye `role`) | `UserPublic` |
+| DELETE | `/users/{id}` | Elimina usuario | `204` |
 | POST | `/contributors/` | Crea/busca por RIF | `ContributorOut` |
 | GET | `/contributors/` | Lista/busca rif/nombre | `List[ContributorOut]` |
 | GET | `/contributors/{id}` | Detalle | `ContributorOut` |
@@ -85,7 +105,7 @@ API (v1/visits.post) -> Depends(CRUD.create_visit) -> SQLModel.save -> 201 Visit
 
 **Regla operativa de estados en historial:** por defecto el historial lista solo visitas en `espera` y `atendido`; las `finalizado` se incluyen solo cuando el cliente envía `incluir_finalizados=true`.
 
-**Autenticación:** JWT básico (funcionario), rol en future.
+**Autenticación:** JWT HS256 con tabla `users`. Campo `role` soporta `admin` y `user`.
 
 ## 5. Buenas Prácticas Obligatorias
 - **Pydantic everywhere**: `response_model=List[VisitPublic]`, `Body(VisitCreate)`.

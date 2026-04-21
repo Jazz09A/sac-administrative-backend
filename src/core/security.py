@@ -21,10 +21,11 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.API_V1_STR}/auth/login
 
 class TokenData(BaseModel):
     person_id: Optional[str] = None
+    role: Optional[str] = None
 
-class FuncionarioBase(BaseModel):
+class CurrentUser(BaseModel):
     person_id: str
-    # Future: role
+    role: str
 
 async def create_access_token(data: dict) -> str:
     """JWT para funcionario."""
@@ -63,20 +64,32 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     normalized = _normalize_password_for_bcrypt(plain_password)
     return bcrypt.checkpw(normalized, hashed_password.encode("utf-8"))
 
-async def verify_token(token: str) -> Optional[FuncionarioBase]:
-    """Verifica JWT (MVP: simple)."""
+async def verify_token(token: str) -> Optional[CurrentUser]:
+    """Verifica JWT y retorna datos del usuario."""
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
         person_id: str = payload.get("sub")
+        role: str = payload.get("role", "user")
         if person_id is None:
             return None
-        return FuncionarioBase(person_id=person_id)
+        return CurrentUser(person_id=person_id, role=role)
     except JWTError:
         return None
 
-# Future deps
-async def get_current_user(token: str = Depends(oauth2_scheme)) -> FuncionarioBase:
+
+async def get_current_user(token: str = Depends(oauth2_scheme)) -> CurrentUser:
+    """Dependencia para obtener el usuario actual desde el token JWT."""
     user = await verify_token(token)
     if not user:
         raise HTTPException(status_code=401, detail="Invalid credentials")
     return user
+
+
+async def require_admin(current_user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
+    """Dependencia que requiere que el usuario sea administrador."""
+    if current_user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Se requieren privilegios de administrador"
+        )
+    return current_user

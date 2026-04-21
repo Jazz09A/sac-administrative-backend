@@ -19,10 +19,12 @@ class UserBase(SQLModel):
     full_name: str = PydanticField(..., min_length=1, max_length=255)
     email: Optional[str] = PydanticField(default=None, max_length=255)
     is_active: bool = Field(default=True)
+    role: str = Field(default="user")  # "admin" or "user"
 
 
 class UserCreate(UserBase):
     password: str = PydanticField(..., min_length=8, max_length=256)
+    role: Optional[str] = PydanticField(default="user", pattern="^(admin|user)$")
 
 
 class UserUpdate(SQLModel):
@@ -30,6 +32,7 @@ class UserUpdate(SQLModel):
     email: Optional[str] = PydanticField(default=None, max_length=255)
     password: Optional[str] = PydanticField(default=None, min_length=8, max_length=256)
     is_active: Optional[bool] = None
+    role: Optional[str] = PydanticField(default=None, pattern="^(admin|user)$")
 
 
 class UserPublic(UserBase):
@@ -54,6 +57,7 @@ class User(UserBase, table=True):  # type: ignore
     person_id: str = Field(index=True, unique=True, max_length=20)
     email: Optional[str] = Field(default=None, index=True, unique=True, max_length=255)
     hashed_password: str = Field(max_length=255)
+    role: str = Field(default="user", max_length=20)
     last_login_at: Optional[datetime] = Field(default=None)
     refresh_token: Optional[str] = Field(default=None, max_length=512)
     refresh_token_expires_at: Optional[datetime] = Field(default=None)

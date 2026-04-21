@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.database import get_db
+from src.core.security import require_admin
 from src.crud.users import (
     create_user,
     delete_user,
@@ -26,6 +27,7 @@ router = APIRouter()
 async def create_new_user(
     user_in: UserCreate,
     db: AsyncSession = Depends(get_db),
+    _: dict = Depends(require_admin),
 ) -> UserPublic:
     existing_by_person_id = await get_user_by_person_id(db, user_in.person_id)
     if existing_by_person_id:

@@ -1,6 +1,6 @@
 # Sistema Contribuyentes Backend (MVP)
 
-**Fecha última mod:** 2026-04-17 | **Cambios:** Init estructura, uv setup. Módulos: pyproject.toml, src/core/config.py.
+**Fecha última mod:** 2026-04-21 | **Cambios:** Agregado campo `role` en tabla `users` (valores: `admin`, `user`) y endpoint `GET /api/v1/auth/me`. Migration: `4457b74aa740_add_users_table_with_role.py`. Módulos: `src/models/user.py`, `alembic/env.py`, `src/api/v1/auth.py`.
 
 ## Stack & Prácticas
 - **FastAPI + SQLModel** (modular, SOLID: SRP en crud/api).
