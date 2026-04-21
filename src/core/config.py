@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     FISCAL_SYNC_BATCH_SIZE: int = 500
     
     # Security
-    SECRET_KEY: str = "change-me-super-secret-key-long-random"
+    SECRET_KEY: str 
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     
     # App
