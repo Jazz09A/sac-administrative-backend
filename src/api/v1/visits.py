@@ -31,6 +31,7 @@ router = APIRouter()
 
 @router.post("/", response_model=VisitWithPhotosPublic, status_code=status.HTTP_201_CREATED)
 async def register_ingreso(
+    contributor_rif: str = Form(...),
     contributor_name: str = Form(...),
     fiscal_id: str = Form(...),
     responsible_person: str = Form(...),
@@ -56,6 +57,7 @@ async def register_ingreso(
         )
 
     visit_in = VisitCreate(
+        contributor_rif=contributor_rif,
         contributor_name=contributor_name,
         fiscal_id=fiscal_id,
         responsible_person=responsible_person,

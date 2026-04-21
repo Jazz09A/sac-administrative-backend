@@ -11,8 +11,15 @@ from src.core.config import get_settings
 from src.core.database import init_db
 from src.api.router import api_router
 
-logger = logging.getLogger(__name__)
 settings = get_settings()
+logger = logging.getLogger(__name__)
+
+
+def _conditional_log(msg: str, level: int = logging.WARNING) -> None:
+    """Log only in local environment."""
+    if settings.is_local:
+        logger.log(level, msg)
+
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
@@ -21,7 +28,7 @@ async def lifespan(_: FastAPI):
         await init_db()
     except Exception as exc:
         # Allow API startup even if DB is temporarily unavailable.
-        logger.warning("Database init skipped during startup: %s", exc)
+        _conditional_log(f"Database init skipped during startup: {exc}")
     yield
 
 

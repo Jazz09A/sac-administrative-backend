@@ -237,9 +237,8 @@ Devuelve último estado de sincronización guardado.
 ### Visits
 ### Regla importante actual
 Para registrar visita **no se envía `contributor_id`**.  
-El request usa `contributor_name` y el backend:
-- busca contribuyente por nombre,
-- si no existe lo crea automáticamente con datos mínimos,
+El request usa **`contributor_rif`** (RIF fiscal real, obligatorio) y **`contributor_name`**. El backend:
+- busca contribuyente por **RIF**; si no existe, lo crea con ese RIF y el nombre indicado (sin RIF temporales; valores que empiecen por `TEMP-` se rechazan),
 - valida `fiscal_id` contra la tabla local `fiscals` (debe existir y estar activo),
 - `fiscal_id` puede venir como `id` local (ej: `"7"`) o como `external_id` UUID (ej: `"022f489c-0f44-4924-a616-b3a7586a60e6"`),
 - registra la visita y devuelve el `id` de la visita en UUID.
@@ -250,6 +249,7 @@ Registrar ingreso.
 `Content-Type`: `multipart/form-data`
 
 Campos de formulario:
+- `contributor_rif` (texto, requerido; RIF fiscal real, máx. 20 caracteres; no se permiten prefijos `TEMP-`)
 - `contributor_name` (texto, requerido)
 - `responsible_person` (texto, requerido)
 - `fiscal_id` (texto, requerido; acepta id local o external_id)
@@ -453,6 +453,7 @@ curl "http://localhost:8000/api/v1/fiscals?query=juan&limit=10"
 ### 6) Crear visita (sin contributor_id en request)
 ```bash
 curl -X POST "http://localhost:8000/api/v1/visits/" \
+  -F "contributor_rif=J-12345678-9" \
   -F "contributor_name=Comercial ABC, C.A." \
   -F "responsible_person=Maria Fernanda Ruiz" \
   -F "fiscal_id=7" \
@@ -470,3 +471,4 @@ curl -X POST "http://localhost:8000/api/v1/visits/" \
 - **Cambios recientes:**
   - Agregado campo `role` en modelo `User` (valores: `admin`, `user`).
   - Nuevo endpoint `GET /api/v1/auth/me` para obtener datos del usuario autenticado.
+  - Registro de visita (`POST /api/v1/visits/`): campo obligatorio `contributor_rif` (RIF real); ya no se generan RIF temporales `TEMP-…`.

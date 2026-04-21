@@ -4,7 +4,7 @@ Visit model: ingreso/salida + status flow.
 """
 from typing import Optional, List
 from sqlmodel import SQLModel, Field, Relationship
-from pydantic import Field as PydanticField
+from pydantic import Field as PydanticField, field_validator
 from datetime import date, datetime, time
 from enum import Enum
 from uuid import UUID, uuid4
@@ -32,6 +32,12 @@ class VisitBase(SQLModel):
     signature_image_url: Optional[str] = Field(default=None, max_length=500)
 
 class VisitCreate(SQLModel):
+    contributor_rif: str = PydanticField(
+        ...,
+        min_length=1,
+        max_length=20,
+        description="RIF fiscal del contribuyente (obligatorio; no se permiten valores temporales)",
+    )
     contributor_name: str = PydanticField(..., min_length=1, max_length=255)
     fiscal_id: str = PydanticField(
         ...,
@@ -47,6 +53,14 @@ class VisitCreate(SQLModel):
     entry_date: date
     entry_time: time
     signature_image_url: Optional[str] = Field(default=None, max_length=500)
+
+    @field_validator("contributor_rif")
+    @classmethod
+    def validate_real_rif(cls, v: str) -> str:
+        s = v.strip()
+        if s.upper().startswith("TEMP-"):
+            raise ValueError("RIF temporal no permitido en registro de visita")
+        return s
 
 class VisitUpdateExit(SQLModel):
     exit_date: Optional[date] = None

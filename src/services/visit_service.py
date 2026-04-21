@@ -20,9 +20,9 @@ class VisitService:
         self.visit_repo = visit_repo
 
     async def create(self, visit_in: VisitCreate) -> Visit:
-        contributor = await self.contributor_repo.get_by_name(visit_in.contributor_name)
-        if contributor is None:
-            contributor = await self.contributor_repo.create_minimal(visit_in.contributor_name)
+        contributor = await self.contributor_repo.get_or_create_by_rif(
+            visit_in.contributor_rif, visit_in.contributor_name
+        )
 
         fiscal = await self._resolve_fiscal(visit_in.fiscal_id)
         if fiscal is None:

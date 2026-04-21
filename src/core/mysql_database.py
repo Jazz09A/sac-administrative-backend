@@ -15,6 +15,12 @@ settings = get_settings()
 logger = logging.getLogger(__name__)
 
 
+def _conditional_log(msg: str, level: int = logging.INFO) -> None:
+    """Log only in local environment."""
+    if settings.is_local:
+        logger.log(level, msg)
+
+
 def _is_truthy(value: str | None) -> bool:
     if value is None:
         return False
@@ -41,7 +47,7 @@ def _build_mysql_async_url(raw_url: str) -> tuple[URL, bool]:
     cleaned_query = {k: v for k, v in url.query.items() if k not in unsupported_query_keys}
     dropped_keys = sorted(set(url.query.keys()) - set(cleaned_query.keys()))
     if dropped_keys:
-        logger.warning("Ignoring unsupported MySQL URL params for asyncmy: %s", dropped_keys)
+        _conditional_log(f"Ignoring unsupported MySQL URL params for asyncmy: {dropped_keys}")
 
     require_ssl = settings.MYSQL_REQUIRE_SSL or any(
         _is_truthy(original_query.get(key)) for key in ("sslaccept", "sslmode", "ssl")
@@ -53,7 +59,7 @@ mysql_url, mysql_require_ssl = _build_mysql_async_url(settings.MYSQL_DATABASE_UR
 mysql_connect_args = {"ssl": ssl.create_default_context()} if mysql_require_ssl else {}
 
 if mysql_require_ssl:
-    logger.info("MySQL connection configured with TLS/SSL enabled.")
+    _conditional_log("MySQL connection configured with TLS/SSL enabled.")
 
 mysql_engine = create_async_engine(mysql_url, echo=False, connect_args=mysql_connect_args)
 MySQLAsyncSessionLocal = async_sessionmaker(

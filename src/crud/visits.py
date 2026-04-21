@@ -15,11 +15,11 @@ async def create_visit(
     session: AsyncSession, visit_in: VisitCreate
 ) -> Visit:
     """Registro ingreso: valida contributor existe."""
-    from .contributors import create_minimal_contributor, get_contributor_by_name  # Lazy import
+    from .contributors import get_or_create_contributor_for_visit  # Lazy import
 
-    contributor = await get_contributor_by_name(session, visit_in.contributor_name)
-    if contributor is None:
-        contributor = await create_minimal_contributor(session, visit_in.contributor_name)
+    contributor = await get_or_create_contributor_for_visit(
+        session, visit_in.contributor_rif, visit_in.contributor_name
+    )
 
     db_visit = Visit(
         contributor_id=contributor.id,

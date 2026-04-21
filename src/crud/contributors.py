@@ -3,7 +3,6 @@ CRUD operations for Contributor model.
 Última mod: 2026-04-17 | Changes: Init get/create. Tests pending.
 """
 from typing import List, Optional
-from uuid import uuid4
 
 from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -51,10 +50,18 @@ async def create_contributor(
     return db_contributor
 
 
-async def create_minimal_contributor(session: AsyncSession, name: str) -> Contributor:
-    """Create a minimal contributor row for visit-driven flow."""
+async def get_or_create_contributor_for_visit(
+    session: AsyncSession, rif: str, name: str
+) -> Contributor:
+    """Resolve contributor by real RIF; create minimal row if missing (visit flow)."""
+    normalized = rif.strip()
+    if normalized.upper().startswith("TEMP-"):
+        raise ValueError("RIF temporal no permitido en registro de visita")
+    existing = await get_contributor_by_rif(session, normalized)
+    if existing:
+        return existing
     db_contributor = Contributor(
-        rif=f"TEMP-{uuid4().hex[:10].upper()}",
+        rif=normalized,
         name=name.strip(),
         type=ContributorType.NATURAL,
     )

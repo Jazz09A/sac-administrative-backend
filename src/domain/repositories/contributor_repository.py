@@ -10,5 +10,8 @@ class ContributorRepository(Protocol):
     async def get_by_name(self, name: str) -> Contributor | None:
         """Return contributor by exact name."""
 
-    async def create_minimal(self, name: str) -> Contributor:
-        """Create contributor with minimal required data."""
+    async def get_by_rif(self, rif: str) -> Contributor | None:
+        """Return contributor by RIF (unique)."""
+
+    async def get_or_create_by_rif(self, rif: str, name: str) -> Contributor:
+        """Return existing contributor by RIF or create one with the given real RIF and name."""

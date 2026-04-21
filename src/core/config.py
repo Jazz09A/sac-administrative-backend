@@ -9,9 +9,17 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env", env_ignore_empty=True, extra="ignore"
     )
-    
+
+    # Environment
+    ENVIRONMENT: str = "production"
+
+    @property
+    def is_local(self) -> bool:
+        return self.ENVIRONMENT.lower() in ("local", "development", "dev")
+
     # Database (from .env)
     DATABASE_URL: str
+    DB_PRODUCTION_URL: str | None = None
     MYSQL_DATABASE_URL: str
     MYSQL_REQUIRE_SSL: bool = True
     FISCAL_SYNC_BATCH_SIZE: int = 500
