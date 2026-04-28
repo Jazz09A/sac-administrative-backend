@@ -2,18 +2,26 @@
 Dashboard avanzado MVP.
 Última mod: 2026-04-17 09:47 | Changes: +vs ayer, % hora anterior, últimas 5.
 """
-from typing import Dict, Any
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
+from typing import Any, Dict, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func, extract
 from sqlmodel import select
 from src.models.visit import Visit, VisitStatus
 from src.models.contributor import Contributor
-from typing import Optional
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+try:
+    VENEZUELA_TZ = ZoneInfo("America/Caracas")
+except ZoneInfoNotFoundError:
+    # Windows envs without tzdata should not crash app startup.
+    VENEZUELA_TZ = timezone(timedelta(hours=-4))
+
+
 async def get_advanced_dashboard(session: AsyncSession, target_date: Optional[date] = None) -> Dict[str, Any]:
     """Dashboard completo requerido."""
     if target_date is None:
-        target_date = date.today()
+        target_date = datetime.now(VENEZUELA_TZ).date()
     
     yesterday = target_date - timedelta(days=1)
     

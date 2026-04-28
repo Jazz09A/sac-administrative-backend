@@ -106,7 +106,16 @@ class FiscalVisitReportItem(SQLModel):
 
 class FiscalVisitsReportResponse(SQLModel):
     total: int
+    skip: int
+    limit: int
     items: list[FiscalVisitReportItem]
+
+
+class VisitHistoryReportResponse(SQLModel):
+    total: int
+    skip: int
+    limit: int
+    items: list[VisitHistoryItem]
 
 class Visit(VisitBase, table=True):  # type: ignore
     id: UUID = Field(default_factory=uuid4, primary_key=True)

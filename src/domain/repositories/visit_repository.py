@@ -45,3 +45,16 @@ class VisitRepository(Protocol):
         limit: int = 100,
     ) -> List[dict[str, Any]]:
         """List visits history with report-friendly columns."""
+
+    async def count_history(
+        self,
+        *,
+        rif: str | None = None,
+        contributor_name: str | None = None,
+        file_number: str | None = None,
+        department: str | None = None,
+        date_from: date | None = None,
+        date_to: date | None = None,
+        status_list: List[VisitStatus] | None = None,
+    ) -> int:
+        """Count visits history using same filters."""

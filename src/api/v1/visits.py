@@ -2,10 +2,12 @@
 API Visits: ingreso/salida MVP.
 Última mod: 2026-04-17 09:03 | Changes: POST/PATCH con filtros.
 """
-from datetime import date, time
+from datetime import date, datetime, time, timedelta, timezone
 from typing import List
 from uuid import UUID
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import select
@@ -25,6 +27,7 @@ from src.models.visit import (
     FiscalVisitsReportResponse,
     Visit,
     VisitCreate,
+    VisitHistoryReportResponse,
     VisitHistoryItem,
     VisitPublic,
     VisitStatus,
@@ -36,37 +39,72 @@ from src.services.visit_service import VisitService
 
 router = APIRouter()
 
+try:
+    VENEZUELA_TZ = ZoneInfo("America/Caracas")
+except ZoneInfoNotFoundError:
+    # Windows envs without tzdata should not crash app startup.
+    VENEZUELA_TZ = timezone(timedelta(hours=-4))
+
+
+def _venezuela_today() -> date:
+    return datetime.now(VENEZUELA_TZ).date()
+
+
 @router.get("/reports/fiscals", response_model=FiscalVisitsReportResponse)
 async def fiscal_visits_report(
     fiscal_id: int | None = None,
     status_filter: str | None = None,
+    contributor_name: str | None = None,
+    rif: str | None = None,
+    fiscal_status: bool | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
     q: str | None = None,
-    limit: int = 500,
+    skip: int = 0,
+    limit: int = 100,
     db: AsyncSession = Depends(get_db),
 ) -> FiscalVisitsReportResponse:
-    statement = (
+    if date_from is None and date_to is None:
+        today_ve = _venezuela_today()
+        date_from = today_ve
+        date_to = today_ve
+
+    base_statement = (
         select(Visit, Contributor, Fiscal)
         .join(Contributor, Visit.contributor_id == Contributor.id)
         .join(Fiscal, Visit.fiscal_id == Fiscal.id, isouter=True)
-        .order_by(Visit.created_at.desc())
-        .limit(limit)
     )
 
     if fiscal_id:
-        statement = statement.where(Visit.fiscal_id == fiscal_id)
+        base_statement = base_statement.where(Visit.fiscal_id == fiscal_id)
     if status_filter:
         status_values = [s.strip() for s in status_filter.split(",") if s.strip()]
         if len(status_values) == 1:
-            statement = statement.where(Visit.status == status_values[0])
+            base_statement = base_statement.where(Visit.status == status_values[0])
         elif status_values:
-            statement = statement.where(Visit.status.in_(status_values))
+            base_statement = base_statement.where(Visit.status.in_(status_values))
+    if contributor_name:
+        base_statement = base_statement.where(
+            Contributor.name.ilike(f"%{contributor_name.strip()}%")
+        )
+    if rif:
+        base_statement = base_statement.where(Contributor.rif.ilike(f"%{rif.strip()}%"))
+    if fiscal_status is not None:
+        base_statement = base_statement.where(Fiscal.status == fiscal_status)
+    if date_from:
+        base_statement = base_statement.where(Visit.entry_date >= date_from)
+    if date_to:
+        base_statement = base_statement.where(Visit.entry_date <= date_to)
     if q:
         term = f"%{q.strip()}%"
-        statement = statement.where(
+        base_statement = base_statement.where(
             Contributor.name.ilike(term) | Contributor.rif.ilike(term)
         )
 
     try:
+        total_statement = select(func.count()).select_from(base_statement.subquery())
+        total = int((await db.execute(total_statement)).scalar_one())
+        statement = base_statement.order_by(Visit.created_at.desc()).offset(skip).limit(limit)
         rows = (await db.execute(statement)).all()
     except (SQLAlchemyError, Exception) as exc:
         raise HTTPException(
@@ -91,7 +129,7 @@ async def fiscal_visits_report(
         )
         for visit, contributor, fiscal in rows
     ]
-    return FiscalVisitsReportResponse(total=len(items), items=items)
+    return FiscalVisitsReportResponse(total=total, skip=skip, limit=limit, items=items)
 
 @router.post("/", response_model=VisitWithPhotosPublic, status_code=status.HTTP_201_CREATED)
 async def register_ingreso(
@@ -192,7 +230,10 @@ async def list_visits(
     limit: int = 100,
     db: AsyncSession = Depends(get_db)
 ) -> List[VisitPublic]:
-    """Búsqueda historial."""
+    """B?squeda historial."""
+    if entry_date is None:
+        entry_date = _venezuela_today()
+
     service = VisitService(
         contributor_repo=PostgresContributorRepository(db),
         fiscal_repo=PostgresFiscalRepository(db),
@@ -215,7 +256,7 @@ async def list_visits(
         for visit in visits
     ]
 
-@router.get("/history", response_model=List[VisitHistoryItem])
+@router.get("/history", response_model=VisitHistoryReportResponse)
 async def list_visit_history(
     rif: str | None = None,
     contribuyente: str | None = None,
@@ -227,8 +268,13 @@ async def list_visit_history(
     skip: int = 0,
     limit: int = 100,
     db: AsyncSession = Depends(get_db)
-) -> List[VisitHistoryItem]:
+) -> VisitHistoryReportResponse:
     """Historial con columnas para reporte administrativo. Muestra todas las visitas por defecto."""
+    if fecha_desde is None and fecha_hasta is None:
+        today_ve = _venezuela_today()
+        fecha_desde = today_ve
+        fecha_hasta = today_ve
+
     service = VisitService(
         contributor_repo=PostgresContributorRepository(db),
         fiscal_repo=PostgresFiscalRepository(db),
@@ -245,7 +291,17 @@ async def list_visit_history(
         skip=skip,
         limit=limit,
     )
-    return [VisitHistoryItem.model_validate(row) for row in rows]
+    total = await service.history_count(
+        rif=rif,
+        contributor_name=contribuyente,
+        file_number=registro,
+        department=departamento,
+        date_from=fecha_desde,
+        date_to=fecha_hasta,
+        status_list=None if incluir_finalizados else [VisitStatus.ESPERA, VisitStatus.ATENDIDO],
+    )
+    items = [VisitHistoryItem.model_validate(row) for row in rows]
+    return VisitHistoryReportResponse(total=total, skip=skip, limit=limit, items=items)
 
 @router.get("/{visit_id}", response_model=VisitPublic)
 async def get_visit_detail(

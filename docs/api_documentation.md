@@ -299,11 +299,53 @@ Parámetros disponibles:
 - `rif` (opcional)
 - `status` (opcional)
 - `fiscal_id` (opcional)
-- `entry_date` (opcional, formato `YYYY-MM-DD`)
+- `entry_date` (opcional, formato `YYYY-MM-DD`; por defecto usa el d?a actual en zona horaria de Venezuela)
 - `skip` (default `0`)
 - `limit` (default `100`)
 
-#### GET `/api/v1/visits/history?rif=J-123&contribuyente=Comercial&registro=EXP-2026&departamento=Fiscalizacion&fecha_desde=2026-04-01&fecha_hasta=2026-04-30&incluir_finalizados=false`
+#### GET `/api/v1/visits/reports/fiscals?fiscal_id=7&status_filter=espera,atendido&contributor_name=Comercial&rif=J-123&fiscal_status=true&date_from=2026-04-01&date_to=2026-04-30&skip=0&limit=20`
+Reporte administrativo de visitas por fiscal, con filtros combinables y paginación.
+
+Filtros disponibles:
+- `fiscal_id` (opcional)
+- `status_filter` (opcional, uno o varios estados separados por coma: `espera,atendido,finalizado,...`)
+- `contributor_name` (opcional, búsqueda parcial case-insensitive)
+- `rif` (opcional, búsqueda parcial case-insensitive)
+- `fiscal_status` (opcional, `true`/`false` para estado activo/inactivo del fiscal)
+- `date_from` (opcional, formato `YYYY-MM-DD`, aplica sobre `entry_date`)
+- `date_to` (opcional, formato `YYYY-MM-DD`, aplica sobre `entry_date`)
+  - Si no se env?a ninguno, el reporte usa por defecto el d?a actual en zona horaria de Venezuela (rango del mismo d?a).
+- `q` (opcional, búsqueda parcial en nombre/rif del contribuyente)
+- `skip` (default `0`)
+- `limit` (default `100`)
+
+**Respuesta 200 (estructura)**
+```json
+{
+  "total": 238,
+  "skip": 0,
+  "limit": 20,
+  "items": [
+    {
+      "visit_id": "49a5f2a5-889f-4739-bf38-b295d2df07ef",
+      "fiscal_id": 7,
+      "fiscal_name": "Maria Perez",
+      "contributor_id": 12,
+      "contributor_name": "Comercial ABC, C.A.",
+      "contributor_rif": "J-12345678-9",
+      "entry_date": "2026-04-17",
+      "entry_time": "10:35:00",
+      "exit_date": null,
+      "exit_time": null,
+      "status": "atendido",
+      "reason": "Entrega de expediente de fiscalizacion",
+      "department": "Fiscalizacion"
+    }
+  ]
+}
+```
+
+#### GET `/api/v1/visits/history?rif=J-123&contribuyente=Comercial&registro=EXP-2026&departamento=Fiscalizacion&fecha_desde=2026-04-01&fecha_hasta=2026-04-30&incluir_finalizados=false&skip=0&limit=20`
 Historial de visitas para reporte administrativo.
 
 Comportamiento de estados:
@@ -326,22 +368,30 @@ Filtros disponibles:
 - `departamento` (búsqueda parcial en departamento del contribuyente, case-insensitive)
 - `fecha_desde` (formato `YYYY-MM-DD`)
 - `fecha_hasta` (formato `YYYY-MM-DD`)
+  - Si no se env?a ninguno, el historial usa por defecto el d?a actual en zona horaria de Venezuela (rango del mismo d?a).
 - `incluir_finalizados` (opcional, default `false`)
 - `skip` (default `0`)
 - `limit` (default `100`)
 
 **Respuesta 200 (estructura)**
 ```json
-[
-  {
-    "rif": "J-12345678-9",
-    "contribuyente": "Comercial ABC, C.A.",
-    "registro": "EXP-2026-00045",
-    "depto": "Fiscalizacion",
-    "motivo": "Entrega de expediente de fiscalizacion",
-    "estado": "atendido"
-  }
-]
+{
+  "total": 57,
+  "skip": 0,
+  "limit": 20,
+  "items": [
+    {
+      "id": "49a5f2a5-889f-4739-bf38-b295d2df07ef",
+      "rif": "J-12345678-9",
+      "contribuyente": "Comercial ABC, C.A.",
+      "registro": "EXP-2026-00045",
+      "depto": "Fiscalizacion",
+      "motivo": "Entrega de expediente de fiscalizacion",
+      "estado": "atendido",
+      "fiscal": "Maria Perez"
+    }
+  ]
+}
 ```
 
 #### GET `/api/v1/visits/{visit_id}`

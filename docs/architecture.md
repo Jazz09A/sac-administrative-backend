@@ -99,7 +99,8 @@ API (v1/visits.post) -> Depends(CRUD.create_visit) -> SQLModel.save -> 201 Visit
 | GET | `/contributors/{id}` | Detalle | `ContributorOut` |
 | POST | `/visits/` | Registro ingreso + foto | `VisitOut` |
 | GET | `/visits/` | Filtros rif/fecha/status | `List[VisitOut]` |
-| GET | `/visits/history` | Historial administrativo (RIF, contribuyente, registro, depto, motivo, estado) con filtros parciales y rango de fechas | `List[VisitHistoryItem]` |
+| GET | `/visits/reports/fiscals` | Reporte por fiscal con filtros por fecha, contribuyente, RIF, estado de visita y estado activo/inactivo del fiscal + paginación (`total/skip/limit/items`) | `FiscalVisitsReportResponse` |
+| GET | `/visits/history` | Historial administrativo (RIF, contribuyente, registro, depto, motivo, estado, fiscal) con filtros parciales/rango de fechas y paginación (`total/skip/limit/items`) | `VisitHistoryReportResponse` |
 | PATCH | `/visits/{id}/exit` | Registra salida | `VisitOut` |
 | GET | `/dashboard/summary` | Métricas día (totales, en espera) | `DashboardSummary` |
 

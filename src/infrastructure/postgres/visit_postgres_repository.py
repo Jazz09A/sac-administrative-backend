@@ -5,6 +5,7 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlmodel import select
+from sqlalchemy import func
 
 from src.domain.repositories.visit_repository import VisitRepository
 from src.models.contributor import Contributor
@@ -13,6 +14,47 @@ from src.models.visit import Visit, VisitStatus, VisitUpdateExit
 
 
 class PostgresVisitRepository(VisitRepository):
+    def _history_base_statement(
+        self,
+        *,
+        rif: str | None = None,
+        contributor_name: str | None = None,
+        file_number: str | None = None,
+        department: str | None = None,
+        date_from: date | None = None,
+        date_to: date | None = None,
+        status_list: List[VisitStatus] | None = None,
+    ):
+        statement = (
+            select(
+                Visit.id,
+                Contributor.rif,
+                Contributor.name,
+                Visit.file_number,
+                Visit.department,
+                Visit.reason,
+                Visit.status,
+                Fiscal.name,
+            )
+            .join(Contributor, Visit.contributor_id == Contributor.id)
+            .outerjoin(Fiscal, Visit.fiscal_id == Fiscal.id)
+        )
+        if rif:
+            statement = statement.where(Contributor.rif.ilike(f"%{rif}%"))
+        if contributor_name:
+            statement = statement.where(Contributor.name.ilike(f"%{contributor_name}%"))
+        if file_number:
+            statement = statement.where(Visit.file_number.ilike(f"%{file_number}%"))
+        if department:
+            statement = statement.where(Visit.department.ilike(f"%{department}%"))
+        if date_from:
+            statement = statement.where(Visit.entry_date >= date_from)
+        if date_to:
+            statement = statement.where(Visit.entry_date <= date_to)
+        if status_list:
+            statement = statement.where(Visit.status.in_(status_list))
+        return statement
+
     def __init__(self, session: AsyncSession):
         self.session = session
 
@@ -97,36 +139,15 @@ class PostgresVisitRepository(VisitRepository):
         skip: int = 0,
         limit: int = 100,
     ) -> List[dict[str, Any]]:
-        statement = (
-            select(
-                Visit.id,
-                Contributor.rif,
-                Contributor.name,
-                Visit.file_number,
-                Visit.department,
-                Visit.reason,
-                Visit.status,
-                Fiscal.name,
-            )
-            .join(Contributor, Visit.contributor_id == Contributor.id)
-            .outerjoin(Fiscal, Visit.fiscal_id == Fiscal.id)
-            .order_by(Visit.created_at.desc())
-        )
-        if rif:
-            statement = statement.where(Contributor.rif.ilike(f"%{rif}%"))
-        if contributor_name:
-            statement = statement.where(Contributor.name.ilike(f"%{contributor_name}%"))
-        if file_number:
-            statement = statement.where(Visit.file_number.ilike(f"%{file_number}%"))
-        if department:
-            statement = statement.where(Visit.department.ilike(f"%{department}%"))
-        if date_from:
-            statement = statement.where(Visit.entry_date >= date_from)
-        if date_to:
-            statement = statement.where(Visit.entry_date <= date_to)
-        if status_list:
-            statement = statement.where(Visit.status.in_(status_list))
-
+        statement = self._history_base_statement(
+            rif=rif,
+            contributor_name=contributor_name,
+            file_number=file_number,
+            department=department,
+            date_from=date_from,
+            date_to=date_to,
+            status_list=status_list,
+        ).order_by(Visit.created_at.desc())
         statement = statement.offset(skip).limit(limit)
         result = await self.session.execute(statement)
         rows = result.all()
@@ -143,3 +164,26 @@ class PostgresVisitRepository(VisitRepository):
             }
             for row in rows
         ]
+
+    async def count_history(
+        self,
+        *,
+        rif: str | None = None,
+        contributor_name: str | None = None,
+        file_number: str | None = None,
+        department: str | None = None,
+        date_from: date | None = None,
+        date_to: date | None = None,
+        status_list: List[VisitStatus] | None = None,
+    ) -> int:
+        base = self._history_base_statement(
+            rif=rif,
+            contributor_name=contributor_name,
+            file_number=file_number,
+            department=department,
+            date_from=date_from,
+            date_to=date_to,
+            status_list=status_list,
+        ).subquery()
+        result = await self.session.execute(select(func.count()).select_from(base))
+        return int(result.scalar_one())

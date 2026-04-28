@@ -109,3 +109,24 @@ class VisitService:
             skip=skip,
             limit=limit,
         )
+
+    async def history_count(
+        self,
+        *,
+        rif: str | None = None,
+        contributor_name: str | None = None,
+        file_number: str | None = None,
+        department: str | None = None,
+        date_from: date | None = None,
+        date_to: date | None = None,
+        status_list: List[VisitStatus] | None = None,
+    ) -> int:
+        return await self.visit_repo.count_history(
+            rif=rif,
+            contributor_name=contributor_name,
+            file_number=file_number,
+            department=department,
+            date_from=date_from,
+            date_to=date_to,
+            status_list=status_list,
+        )
