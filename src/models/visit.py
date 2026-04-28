@@ -88,6 +88,26 @@ class VisitHistoryItem(SQLModel):
     estado: VisitStatus
     fiscal: Optional[str] = None
 
+class FiscalVisitReportItem(SQLModel):
+    visit_id: UUID
+    fiscal_id: Optional[int] = None
+    fiscal_name: Optional[str] = None
+    contributor_id: int
+    contributor_name: str
+    contributor_rif: str
+    entry_date: date
+    entry_time: time
+    exit_date: Optional[date] = None
+    exit_time: Optional[time] = None
+    status: VisitStatus
+    reason: str
+    department: Optional[str] = None
+
+
+class FiscalVisitsReportResponse(SQLModel):
+    total: int
+    items: list[FiscalVisitReportItem]
+
 class Visit(VisitBase, table=True):  # type: ignore
     id: UUID = Field(default_factory=uuid4, primary_key=True)
     contributor_id: int = Field(foreign_key="contributor.id", index=True)

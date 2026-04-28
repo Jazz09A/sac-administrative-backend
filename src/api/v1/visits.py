@@ -7,16 +7,23 @@ from typing import List
 from uuid import UUID
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.exc import SQLAlchemyError
+from sqlmodel import select
 
 from src.core.config import Settings, get_settings
 from src.core.database import get_db
 from src.infrastructure.postgres.contributor_postgres_repository import PostgresContributorRepository
+from src.models.contributor import Contributor
+from src.models.fiscal import Fiscal
 from src.infrastructure.postgres.fiscal_postgres_repository import PostgresFiscalRepository
 from src.infrastructure.postgres.photo_postgres_repository import PostgresPhotoRepository
 from src.infrastructure.postgres.visit_postgres_repository import PostgresVisitRepository
 from src.infrastructure.storage.s3_repository import S3FileStorageRepository
 from src.models.photo import PhotoPublic
 from src.models.visit import (
+    FiscalVisitReportItem,
+    FiscalVisitsReportResponse,
+    Visit,
     VisitCreate,
     VisitHistoryItem,
     VisitPublic,
@@ -28,6 +35,63 @@ from src.services.photo_service import PhotoService
 from src.services.visit_service import VisitService
 
 router = APIRouter()
+
+@router.get("/reports/fiscals", response_model=FiscalVisitsReportResponse)
+async def fiscal_visits_report(
+    fiscal_id: int | None = None,
+    status_filter: str | None = None,
+    q: str | None = None,
+    limit: int = 500,
+    db: AsyncSession = Depends(get_db),
+) -> FiscalVisitsReportResponse:
+    statement = (
+        select(Visit, Contributor, Fiscal)
+        .join(Contributor, Visit.contributor_id == Contributor.id)
+        .join(Fiscal, Visit.fiscal_id == Fiscal.id, isouter=True)
+        .order_by(Visit.created_at.desc())
+        .limit(limit)
+    )
+
+    if fiscal_id:
+        statement = statement.where(Visit.fiscal_id == fiscal_id)
+    if status_filter:
+        status_values = [s.strip() for s in status_filter.split(",") if s.strip()]
+        if len(status_values) == 1:
+            statement = statement.where(Visit.status == status_values[0])
+        elif status_values:
+            statement = statement.where(Visit.status.in_(status_values))
+    if q:
+        term = f"%{q.strip()}%"
+        statement = statement.where(
+            Contributor.name.ilike(term) | Contributor.rif.ilike(term)
+        )
+
+    try:
+        rows = (await db.execute(statement)).all()
+    except (SQLAlchemyError, Exception) as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Base de datos no disponible para generar el reporte por fiscal.",
+        ) from exc
+    items = [
+        FiscalVisitReportItem(
+            visit_id=visit.id,
+            fiscal_id=visit.fiscal_id,
+            fiscal_name=fiscal.name if fiscal else None,
+            contributor_id=contributor.id or 0,
+            contributor_name=contributor.name,
+            contributor_rif=contributor.rif,
+            entry_date=visit.entry_date,
+            entry_time=visit.entry_time,
+            exit_date=visit.exit_date,
+            exit_time=visit.exit_time,
+            status=visit.status,
+            reason=visit.reason,
+            department=visit.department,
+        )
+        for visit, contributor, fiscal in rows
+    ]
+    return FiscalVisitsReportResponse(total=len(items), items=items)
 
 @router.post("/", response_model=VisitWithPhotosPublic, status_code=status.HTTP_201_CREATED)
 async def register_ingreso(
