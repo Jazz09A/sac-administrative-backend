@@ -2,7 +2,7 @@ from typing import Any, List, Protocol
 from datetime import date
 from uuid import UUID
 
-from src.models.visit import Visit, VisitStatus, VisitUpdateExit
+from src.models.visit import Visit, VisitStatus, VisitUpdate, VisitUpdateExit
 
 
 class VisitRepository(Protocol):
@@ -27,6 +27,9 @@ class VisitRepository(Protocol):
 
     async def register_exit(self, visit_id: UUID, exit_data: VisitUpdateExit) -> Visit | None:
         """Register visit exit."""
+
+    async def update(self, visit_id: UUID, visit_data: dict[str, Any]) -> Visit | None:
+        """Update editable visit fields."""
 
     async def mark_as_attended(self, visit_id: UUID) -> Visit | None:
         """Mark visit as attended (status espera -> atendido)."""

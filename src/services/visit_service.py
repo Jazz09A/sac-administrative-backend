@@ -5,7 +5,7 @@ from uuid import UUID
 from src.domain.repositories.contributor_repository import ContributorRepository
 from src.domain.repositories.fiscal_repository import FiscalRepository
 from src.domain.repositories.visit_repository import VisitRepository
-from src.models.visit import Visit, VisitCreate, VisitStatus, VisitUpdateExit
+from src.models.visit import Visit, VisitCreate, VisitStatus, VisitUpdate, VisitUpdateExit
 
 
 class VisitService:
@@ -81,6 +81,18 @@ class VisitService:
 
     async def register_exit(self, visit_id: UUID, exit_data: VisitUpdateExit) -> Visit | None:
         return await self.visit_repo.register_exit(visit_id, exit_data)
+
+    async def update(self, visit_id: UUID, visit_data: VisitUpdate) -> Visit | None:
+        payload = visit_data.model_dump(exclude_unset=True)
+        fiscal_identifier = payload.get("fiscal_id")
+        if fiscal_identifier is not None:
+            fiscal = await self._resolve_fiscal(fiscal_identifier)
+            if fiscal is None:
+                raise ValueError("Fiscal no existe")
+            if not fiscal.status:
+                raise ValueError("Fiscal inactivo")
+            payload["fiscal_id"] = fiscal.id
+        return await self.visit_repo.update(visit_id, payload)
 
     async def mark_as_attended(self, visit_id: UUID) -> Visit | None:
         return await self.visit_repo.mark_as_attended(visit_id)

@@ -400,6 +400,41 @@ Obtiene visita por ID UUID.
 Ejemplo:
 `GET /api/v1/visits/49a5f2a5-889f-4739-bf38-b295d2df07ef`
 
+#### PATCH `/api/v1/visits/{visit_id}`
+Corrige campos de una visita ya registrada (actualizacion parcial).
+
+Campos editables (todos opcionales):
+- `fiscal_id` (texto; acepta `id` local o `external_id`, igual que en el registro)
+- `reason`
+- `observations`
+- `received_by`
+- `department`
+- `file_number`
+- `entry_date` (`YYYY-MM-DD`)
+- `entry_time` (`HH:MM:SS`)
+- `exit_date` (`YYYY-MM-DD`)
+- `exit_time` (`HH:MM:SS`)
+- `status` (`espera`, `atendido`, `finalizado`, `rechazado`, `reprogramado`)
+
+**Body ejemplo**
+```json
+{
+  "reason": "Correccion de motivo",
+  "department": "Recaudacion",
+  "status": "atendido"
+}
+```
+
+**Respuesta**
+- Devuelve `VisitPublic`, incluyendo el fiscal asignado en:
+  - `fiscal_id` (id local guardado)
+  - `fiscal_name` (nombre del fiscal responsable)
+
+**Errores tipicos**
+- `400`: fiscal inexistente o inactivo
+- `404`: visita no encontrada
+- `422`: payload invalido
+
 #### PATCH `/api/v1/visits/{visit_id}/exit`
 Registra salida de visita.
 

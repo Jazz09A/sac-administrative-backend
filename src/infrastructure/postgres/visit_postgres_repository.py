@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 from typing import Any, List
 from uuid import UUID
 
@@ -114,6 +114,20 @@ class PostgresVisitRepository(VisitRepository):
         await self.session.flush()
         await self.session.refresh(visit)
         return visit
+
+    async def update(self, visit_id: UUID, visit_data: dict[str, Any]) -> Visit | None:
+        visit = await self.get(visit_id)
+        if not visit:
+            return None
+
+        for field_name, value in visit_data.items():
+            setattr(visit, field_name, value)
+        visit.updated_at = datetime.utcnow()
+
+        self.session.add(visit)
+        await self.session.flush()
+        # Reload with selectinload to return the currently assigned fiscal.
+        return await self.get(visit_id)
 
     async def mark_as_attended(self, visit_id: UUID) -> Visit | None:
         visit = await self.get(visit_id)  # ya usa selectinload(fiscal)

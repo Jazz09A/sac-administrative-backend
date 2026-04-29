@@ -67,6 +67,25 @@ class VisitUpdateExit(SQLModel):
     exit_time: Optional[time] = None
     status: Optional[VisitStatus] = None
 
+
+class VisitUpdate(SQLModel):
+    fiscal_id: Optional[str] = PydanticField(
+        default=None,
+        min_length=1,
+        max_length=255,
+        description="Identificador fiscal: id local o external_id",
+    )
+    reason: Optional[str] = PydanticField(default=None, max_length=500)
+    observations: Optional[str] = Field(default=None, max_length=1000)
+    received_by: Optional[str] = Field(default=None, max_length=255)
+    department: Optional[str] = Field(default=None, max_length=255)
+    file_number: Optional[str] = Field(default=None, max_length=100)
+    entry_date: Optional[date] = None
+    entry_time: Optional[time] = None
+    exit_date: Optional[date] = None
+    exit_time: Optional[time] = None
+    status: Optional[VisitStatus] = None
+
 class VisitPublic(VisitBase):
     id: Optional[UUID] = Field(default=None)
     fiscal_name: Optional[str] = None

@@ -31,6 +31,7 @@ from src.models.visit import (
     VisitHistoryItem,
     VisitPublic,
     VisitStatus,
+    VisitUpdate,
     VisitUpdateExit,
     VisitWithPhotosPublic,
 )
@@ -333,6 +334,28 @@ async def mark_visit_attended(
     visit = await service.mark_as_attended(visit_id)
     if not visit:
         raise HTTPException(status_code=400, detail="No se puede marcar como atendido. La visita debe estar en espera.")
+    return VisitPublic.model_validate(
+        visit,
+        update={"fiscal_name": visit.fiscal.name if visit.fiscal else None},
+    )
+
+
+@router.patch("/{visit_id}", response_model=VisitPublic)
+async def update_visit(
+    visit_id: UUID, visit_data: VisitUpdate, db: AsyncSession = Depends(get_db)
+) -> VisitPublic:
+    """Corrige campos editables de una visita."""
+    service = VisitService(
+        contributor_repo=PostgresContributorRepository(db),
+        fiscal_repo=PostgresFiscalRepository(db),
+        visit_repo=PostgresVisitRepository(db),
+    )
+    try:
+        visit = await service.update(visit_id, visit_data)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if not visit:
+        raise HTTPException(status_code=404, detail="Visita no encontrada")
     return VisitPublic.model_validate(
         visit,
         update={"fiscal_name": visit.fiscal.name if visit.fiscal else None},
