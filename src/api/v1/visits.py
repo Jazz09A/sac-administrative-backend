@@ -20,7 +20,7 @@ from src.models.fiscal import Fiscal
 from src.infrastructure.postgres.fiscal_postgres_repository import PostgresFiscalRepository
 from src.infrastructure.postgres.photo_postgres_repository import PostgresPhotoRepository
 from src.infrastructure.postgres.visit_postgres_repository import PostgresVisitRepository
-from src.infrastructure.storage.s3_repository import S3FileStorageRepository
+from src.infrastructure.storage.storage_factory import create_file_storage_repository
 from src.models.photo import PhotoPublic
 from src.models.visit import (
     FiscalVisitReportItem,
@@ -152,11 +152,16 @@ async def register_ingreso(
     if not photo.filename:
         raise HTTPException(status_code=400, detail="La imagen es obligatoria")
 
-    bucket_name = settings.BUCKET_NAME_S3.strip()
+    if settings.STORAGE_PROVIDER == "supabase":
+        bucket_name = settings.BUCKET_NAME_SUPABASE.strip()
+        bucket_name_setting_name = "BUCKET_NAME_SUPABASE"
+    else:
+        bucket_name = settings.BUCKET_NAME_S3.strip()
+        bucket_name_setting_name = "BUCKET_NAME_S3"
     if not bucket_name:
         raise HTTPException(
             status_code=500,
-            detail="Configuracion incompleta: BUCKET_NAME_S3 es obligatorio",
+            detail=f"Configuracion incompleta: {bucket_name_setting_name} es obligatorio",
         )
 
     visit_in = VisitCreate(
@@ -177,18 +182,11 @@ async def register_ingreso(
         fiscal_repo=PostgresFiscalRepository(db),
         visit_repo=PostgresVisitRepository(db),
     )
+    storage_repo = create_file_storage_repository(settings)
     photo_service = PhotoService(
         photo_repo=PostgresPhotoRepository(db),
-        storage_repo=S3FileStorageRepository(
-            endpoint_url=settings.URL_BUCKET_S3,
-            access_key_id=settings.ACCESS_KEY_S3,
-            secret_access_key=settings.SECRET_ACCESS_KEY_S3,
-            bucket_name=bucket_name,
-            region_name=settings.S3_REGION,
-        ),
+        storage_repo=storage_repo,
     )
-
-    public_base_url = settings.R2_PUBLIC_BASE_URL.rstrip("/")
 
     try:
         visit = await service.create(visit_in)
@@ -200,9 +198,7 @@ async def register_ingreso(
             content_type=photo.content_type or "",
             bucket_name=bucket_name,
         )
-        photo_url = (
-            f"{public_base_url}/{created_photo.object_key}" if public_base_url else created_photo.object_key
-        )
+        photo_url = storage_repo.get_public_url(created_photo.object_key)
         visit.signature_image_url = photo_url
         db.add(visit)
         await db.flush()

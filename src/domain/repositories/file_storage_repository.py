@@ -7,3 +7,6 @@ class FileStorageRepository(Protocol):
 
     async def delete(self, key: str) -> bool:
         """Delete object by key."""
+
+    def get_public_url(self, key: str) -> str:
+        """Build a public URL for the object key using provider strategy."""

@@ -2,8 +2,9 @@
 Configuración app-wide con Pydantic Settings.
 Última mod: 2026-04-17 09:01 | Changes: DATABASE_URL, SECRET_KEY, Postgres async.
 """
-from pydantic_settings import BaseSettings, SettingsConfigDict
 from functools import lru_cache
+from pydantic import model_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -42,6 +43,7 @@ class Settings(BaseSettings):
     REQUIRE_AUTH: bool = False  # Future JWT
 
     # Cloud storage (Cloudflare R2 / S3 compatible)
+    STORAGE_PROVIDER: str = "s3"  # "s3" or "supabase"
     URL_BUCKET_S3: str = ""
     ACCESS_KEY_S3: str = ""
     TOKEN_VALUE_S3: str = ""
@@ -52,8 +54,38 @@ class Settings(BaseSettings):
     # URL final = R2_PUBLIC_BASE_URL + "/" + object_key
     R2_PUBLIC_BASE_URL: str = ""
 
+    # Supabase storage
+    SUPABASE_URL: str = ""
+    SUPABASE_KEY: str = ""
+    BUCKET_NAME_SUPABASE: str = ""
+
     # CORS (from .env - formato JSON: ["http://localhost:3000","https://miapp.com"])
     ALLOWED_ORIGINS: list[str]
+
+    @model_validator(mode="after")
+    def validate_storage_settings(self) -> "Settings":
+        provider = self.STORAGE_PROVIDER.strip().lower()
+
+        if provider not in {"s3", "supabase"}:
+            raise ValueError("STORAGE_PROVIDER debe ser 's3' o 'supabase'")
+
+        if provider == "supabase":
+            supabase_url = self.SUPABASE_URL.strip().rstrip("/")
+            if not supabase_url:
+                raise ValueError("SUPABASE_URL es obligatorio para STORAGE_PROVIDER=supabase")
+            if ".storage.supabase.co" in supabase_url or "/storage/v1" in supabase_url:
+                raise ValueError(
+                    "SUPABASE_URL invalido: use la URL del proyecto "
+                    "(https://<project-ref>.supabase.co), no el endpoint S3/Storage."
+                )
+
+            if not self.SUPABASE_KEY.strip():
+                raise ValueError("SUPABASE_KEY es obligatorio para STORAGE_PROVIDER=supabase")
+            if not self.BUCKET_NAME_SUPABASE.strip():
+                raise ValueError("BUCKET_NAME_SUPABASE es obligatorio para STORAGE_PROVIDER=supabase")
+
+        return self
+
 @lru_cache()
 def get_settings() -> Settings:
     return Settings()
