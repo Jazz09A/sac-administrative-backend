@@ -3,7 +3,7 @@
 ```markdown
 # Arquitectura del Backend - Sistema Contribuyentes MVP
 
-**Última modificación:** 2026-04-21 | **Cambios:** Agregado campo `role` en tabla `users` y nuevo endpoint `GET /auth/me`. Migration: `4457b74aa740_add_users_table_with_role.py`. **Módulos tocados:** `src/models/user.py`, `alembic/env.py`, `src/api/v1/auth.py`, `docs/api_documentation.md`.
+**Última modificación:** 2026-05-04 | **Cambios:** Soft delete en visitas (`deleted_at` + `DELETE /visits/{id}`), filtros para excluir borradas en listados/reportes y documentación explícita de patrón Strategy en storage. **Módulos tocados:** `src/models/visit.py`, `src/api/v1/visits.py`, `src/services/visit_service.py`, `src/infrastructure/postgres/visit_postgres_repository.py`, `src/infrastructure/storage/storage_factory.py`, `src/domain/repositories/file_storage_repository.py`, `docs/api_documentation.md`.
 
 ## 1. Visión General
 Aplicación **FastAPI** modular siguiendo **SOLID** (SRP, OCP, LSP, ISP, DIP) para registro/control de contribuyentes. Enfoque hexagonal: entidades puras -> repositorios -> controllers. **Postgres** async, **uv** deps.
@@ -53,6 +53,7 @@ erDiagram
         varchar signature_image_url
         timestamp created_at
         timestamp updated_at
+        timestamp deleted_at
     }
     PHOTOS {
         uuid id PK
@@ -66,7 +67,7 @@ erDiagram
     VISITS ||--o{ PHOTOS : "evidencia"
 ```
 
-**Indexes clave:** rif (contributors), status+entry_date (visits).
+**Indexes clave:** rif (contributors), status+entry_date (visits), deleted_at (visits para exclusión por soft delete).
 
 ## 3. Capas Arquitectónicas (SOLID)
 
@@ -101,12 +102,23 @@ API (v1/visits.post) -> Depends(CRUD.create_visit) -> SQLModel.save -> 201 Visit
 | GET | `/visits/` | Filtros rif/fecha/status | `List[VisitOut]` |
 | GET | `/visits/reports/fiscals` | Reporte por fiscal con filtros por fecha, contribuyente, RIF, estado de visita y estado activo/inactivo del fiscal + paginación (`total/skip/limit/items`) | `FiscalVisitsReportResponse` |
 | GET | `/visits/history` | Historial administrativo (RIF, contribuyente, registro, depto, motivo, estado, fiscal) con filtros parciales/rango de fechas y paginación (`total/skip/limit/items`) | `VisitHistoryReportResponse` |
+| DELETE | `/visits/{id}` | Borrado lógico de visita (`soft delete`) | `204` |
 | PATCH | `/visits/{id}/exit` | Registra salida | `VisitOut` |
 | GET | `/dashboard/summary` | Métricas día (totales, en espera) | `DashboardSummary` |
 
 **Regla operativa de estados en historial:** por defecto el historial lista solo visitas en `espera` y `atendido`; las `finalizado` se incluyen solo cuando el cliente envía `incluir_finalizados=true`.
 
+**Regla de soft delete en visitas:** `deleted_at` marca borrado lógico. Las consultas operativas (`get/list/report/history/dashboard`) excluyen registros con `deleted_at` no nulo por defecto.
+
 **Autenticación:** JWT HS256 con tabla `users`. Campo `role` soporta `admin` y `user`.
+
+## 4.1 Patrones de diseño aplicados
+
+- **Strategy (Storage Provider):**
+  - Contrato: `FileStorageRepository` define `upload`, `delete` y `get_public_url`.
+  - Estrategias concretas: `S3FileStorageRepository` y `SupabaseFileStorageRepository`.
+  - Contexto/fábrica: `create_file_storage_repository(settings)` selecciona la estrategia según `settings.STORAGE_PROVIDER`.
+  - Beneficio: desacopla la lógica de negocio del proveedor de almacenamiento y facilita extensión sin modificar servicios consumidores (OCP + DIP).
 
 ## 5. Buenas Prácticas Obligatorias
 - **Pydantic everywhere**: `response_model=List[VisitPublic]`, `Body(VisitCreate)`.

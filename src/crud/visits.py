@@ -41,8 +41,9 @@ async def create_visit(
 
 async def get_visit(session: AsyncSession, visit_id: UUID) -> Optional[Visit]:
     """Get by ID."""
-    result = await session.get(Visit, visit_id)
-    return result
+    statement = select(Visit).where(Visit.id == visit_id, Visit.deleted_at.is_(None))
+    result = await session.execute(statement)
+    return result.scalar_one_or_none()
 
 async def get_visits(
     session: AsyncSession,
@@ -54,7 +55,7 @@ async def get_visits(
     limit: int = 100
 ) -> List[Visit]:
     """Filtros MVP: rif/status/fecha."""
-    statement = select(Visit)
+    statement = select(Visit).where(Visit.deleted_at.is_(None))
     if contributor_id:
         statement = statement.where(Visit.contributor_id == contributor_id)
     if rif:
@@ -85,6 +86,6 @@ async def update_visit_exit(
 
 async def get_open_visits(session: AsyncSession) -> List[Visit]:
     """Dashboard: en espera."""
-    statement = select(Visit).where(Visit.status == VisitStatus.ESPERA)
+    statement = select(Visit).where(Visit.status == VisitStatus.ESPERA, Visit.deleted_at.is_(None))
     result = await session.execute(statement)
     return list(result.scalars().all())

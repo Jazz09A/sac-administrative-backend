@@ -26,19 +26,19 @@ async def get_advanced_dashboard(session: AsyncSession, target_date: Optional[da
     yesterday = target_date - timedelta(days=1)
     
     # Base queries
-    today_filter = Visit.entry_date == target_date
-    yesterday_filter = Visit.entry_date == yesterday
+    today_filter = (Visit.entry_date == target_date, Visit.deleted_at.is_(None))
+    yesterday_filter = (Visit.entry_date == yesterday, Visit.deleted_at.is_(None))
     
     # 1. Visitas en curso (status espera/atendido sin salida)
     en_curso = select(func.count()).where(
-        today_filter,
+        *today_filter,
         Visit.status.in_([VisitStatus.ESPERA, VisitStatus.ATENDIDO]),
         Visit.exit_date.is_(None)
     )
     
     # 2. Entradas hoy vs ayer (%)
-    today_entries = select(func.count()).where(today_filter)
-    yesterday_entries = select(func.count()).where(yesterday_filter)
+    today_entries = select(func.count()).where(*today_filter)
+    yesterday_entries = select(func.count()).where(*yesterday_filter)
     hoy_total = (await session.execute(today_entries)).scalar() or 0
     ayer_total = (await session.execute(yesterday_entries)).scalar() or 0
     entradas_vs_ayer = {
@@ -51,13 +51,13 @@ async def get_advanced_dashboard(session: AsyncSession, target_date: Optional[da
     now_hour = func.extract('hour', func.now())
     prev_hour = now_hour - 1
     dentro_actual = select(func.count()).where(
-        today_filter,
+        *today_filter,
         Visit.status.in_([VisitStatus.ESPERA, VisitStatus.ATENDIDO]),
         Visit.exit_date.is_(None),
         extract('hour', Visit.entry_time) <= now_hour
     )
     dentro_prev = select(func.count()).where(
-        today_filter,
+        *today_filter,
         Visit.status.in_([VisitStatus.ESPERA, VisitStatus.ATENDIDO]),
         Visit.exit_date.is_(None),
         extract('hour', Visit.entry_time) <= prev_hour
@@ -73,12 +73,12 @@ async def get_advanced_dashboard(session: AsyncSession, target_date: Optional[da
     # 4-5. Visitas atendidas/pendientes hoy
     # visitas_atendidas = TOTAL de visitas del día (todas las que ingresaron hoy)
     # visitas_pendientes = las que aún están en espera
-    atendidas = select(func.count()).where(today_filter)
-    pendientes = select(func.count()).where(today_filter, Visit.status == VisitStatus.ESPERA)
+    atendidas = select(func.count()).where(*today_filter)
+    pendientes = select(func.count()).where(*today_filter, Visit.status == VisitStatus.ESPERA)
     
     # 6. Últimas 5 visitas (recientes hoy)
     ultimas = select(Visit, Contributor).join(Contributor).where(
-        today_filter
+        *today_filter
     ).order_by(Visit.created_at.desc()).limit(5)
     
     result = {

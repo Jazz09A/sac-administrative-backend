@@ -97,6 +97,9 @@ class VisitService:
     async def mark_as_attended(self, visit_id: UUID) -> Visit | None:
         return await self.visit_repo.mark_as_attended(visit_id)
 
+    async def soft_delete(self, visit_id: UUID) -> Visit | None:
+        return await self.visit_repo.soft_delete(visit_id)
+
     async def history(
         self,
         *,

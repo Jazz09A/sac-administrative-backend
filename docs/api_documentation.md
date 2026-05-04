@@ -235,6 +235,11 @@ Devuelve último estado de sincronización guardado.
 ---
 
 ### Visits
+### Soft delete aplicado
+- Las visitas usan borrado lógico con el campo `deleted_at`.
+- `DELETE /api/v1/visits/{visit_id}` no elimina físicamente: asigna timestamp en `deleted_at`.
+- Los listados/reportes de visitas excluyen por defecto registros con `deleted_at` no nulo.
+
 ### Regla importante actual
 Para registrar visita **no se envía `contributor_id`**.  
 El request usa **`contributor_rif`** (RIF fiscal real, obligatorio) y **`contributor_name`**. El backend:
@@ -280,6 +285,7 @@ Campos de formulario:
   "exit_time": null,
   "status": "espera",
   "created_at": "2026-04-17T14:35:00.512000",
+  "deleted_at": null,
   "photos": [
     {
       "visit_id": "49a5f2a5-889f-4739-bf38-b295d2df07ef",
@@ -294,6 +300,9 @@ Campos de formulario:
 #### GET `/api/v1/visits/?status=espera&fiscal_id=7&skip=0&limit=20`
 Lista visitas con filtros.
 
+Regla de visibilidad:
+- Excluye automáticamente visitas con `deleted_at` informado.
+
 Parámetros disponibles:
 - `contributor_id` (opcional)
 - `rif` (opcional)
@@ -305,6 +314,9 @@ Parámetros disponibles:
 
 #### GET `/api/v1/visits/reports/fiscals?fiscal_id=7&status_filter=espera,atendido&contributor_name=Comercial&rif=J-123&fiscal_status=true&date_from=2026-04-01&date_to=2026-04-30&skip=0&limit=20`
 Reporte administrativo de visitas por fiscal, con filtros combinables y paginación.
+
+Regla de visibilidad:
+- Excluye automáticamente visitas con `deleted_at` informado.
 
 Filtros disponibles:
 - `fiscal_id` (opcional)
@@ -352,6 +364,9 @@ Comportamiento de estados:
 - Por defecto (`incluir_finalizados=false`) solo devuelve `espera` y `atendido`.
 - Si `incluir_finalizados=true`, también incluye visitas `finalizado`.
 
+Regla de visibilidad:
+- Excluye automáticamente visitas con `deleted_at` informado.
+
 Columnas de respuesta:
 - `id` (UUID de la visita)
 - `rif`
@@ -397,6 +412,9 @@ Filtros disponibles:
 #### GET `/api/v1/visits/{visit_id}`
 Obtiene visita por ID UUID.
 
+Regla de visibilidad:
+- Si la visita fue borrada lógicamente (`deleted_at` con valor), responde como no encontrada (`404`).
+
 Ejemplo:
 `GET /api/v1/visits/49a5f2a5-889f-4739-bf38-b295d2df07ef`
 
@@ -435,6 +453,9 @@ Campos editables (todos opcionales):
 - `404`: visita no encontrada
 - `422`: payload invalido
 
+Nota:
+- No permite actualizar visitas borradas lógicamente (responde `404`).
+
 #### PATCH `/api/v1/visits/{visit_id}/exit`
 Registra salida de visita.
 
@@ -451,6 +472,21 @@ Registra salida de visita.
 - `400`: no se puede registrar salida (estado no permitido)
 - `404`: visita no encontrada
 - `422`: payload inválido
+
+Nota:
+- No permite registrar salida sobre visitas borradas lógicamente.
+
+#### DELETE `/api/v1/visits/{visit_id}`
+Aplica borrado lógico de visita (soft delete).
+
+Comportamiento:
+- Marca `deleted_at` con timestamp UTC.
+- No elimina la fila de base de datos.
+- Desde ese momento no aparece en listados/reportes estándar de visitas.
+
+Respuestas:
+- `204`: borrado lógico aplicado.
+- `404`: visita no encontrada (incluye cuando ya está borrada).
 
 ---
 
@@ -551,9 +587,12 @@ curl -X POST "http://localhost:8000/api/v1/visits/" \
 ## Notas
 - Errores comunes: `422` (validación), `404` (no encontrado), `400` (regla de negocio), `401` (login inválido).
 - `visit_id` ahora es UUID.
+- Visitas usan soft delete con `deleted_at`; para depuración/auditoría se conserva el registro.
 - En `/docs`, el flujo OAuth2 usa `tokenUrl` `POST /api/v1/auth/login` para obtener el bearer token en pruebas interactivas.
-- Última actualización de esta documentación: 2026-04-21.
+- Última actualización de esta documentación: 2026-05-04.
 - **Cambios recientes:**
+  - Soft delete en visitas: nuevo `DELETE /api/v1/visits/{visit_id}`, nuevo campo `deleted_at`, y filtros para excluir eliminadas en listados/reportes.
+  - Patrón Strategy en almacenamiento de archivos: selección de proveedor (`s3`/`supabase`) mediante `create_file_storage_repository` y contrato `FileStorageRepository`.
   - Agregado campo `role` en modelo `User` (valores: `admin`, `user`).
   - Nuevo endpoint `GET /api/v1/auth/me` para obtener datos del usuario autenticado.
   - Registro de visita (`POST /api/v1/visits/`): campo obligatorio `contributor_rif` (RIF real); ya no se generan RIF temporales `TEMP-…`.

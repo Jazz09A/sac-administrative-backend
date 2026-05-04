@@ -33,6 +33,9 @@ class VisitRepository(Protocol):
 
     async def mark_as_attended(self, visit_id: UUID) -> Visit | None:
         """Mark visit as attended (status espera -> atendido)."""
+
+    async def soft_delete(self, visit_id: UUID) -> Visit | None:
+        """Soft delete visit setting deleted_at timestamp."""
     
     async def list_history(
         self,

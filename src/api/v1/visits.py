@@ -74,6 +74,7 @@ async def fiscal_visits_report(
         select(Visit, Contributor, Fiscal)
         .join(Contributor, Visit.contributor_id == Contributor.id)
         .join(Fiscal, Visit.fiscal_id == Fiscal.id, isouter=True)
+        .where(Visit.deleted_at.is_(None))
     )
 
     if fiscal_id:
@@ -374,3 +375,18 @@ async def register_salida(
         visit,
         update={"fiscal_name": visit.fiscal.name if visit.fiscal else None},
     )
+
+
+@router.delete("/{visit_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_visit(
+    visit_id: UUID, db: AsyncSession = Depends(get_db)
+) -> None:
+    """Borrado logico de visita (soft delete)."""
+    service = VisitService(
+        contributor_repo=PostgresContributorRepository(db),
+        fiscal_repo=PostgresFiscalRepository(db),
+        visit_repo=PostgresVisitRepository(db),
+    )
+    visit = await service.soft_delete(visit_id)
+    if not visit:
+        raise HTTPException(status_code=404, detail="Visita no encontrada")

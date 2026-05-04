@@ -93,6 +93,7 @@ class VisitPublic(VisitBase):
     exit_time: Optional[time] = None
     status: VisitStatus = Field(default=VisitStatus.ESPERA)
     created_at: Optional[datetime] = None
+    deleted_at: Optional[datetime] = None
 
 class VisitWithPhotosPublic(VisitPublic):
     photos: List[PhotoPublic] = []
@@ -145,6 +146,7 @@ class Visit(VisitBase, table=True):  # type: ignore
     status: VisitStatus = Field(default=VisitStatus.ESPERA)
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: Optional[datetime] = Field(default_factory=datetime.utcnow)
+    deleted_at: Optional[datetime] = Field(default=None, index=True)
     
     # Relaciones
     contributor: "Contributor" = Relationship(back_populates="visits")

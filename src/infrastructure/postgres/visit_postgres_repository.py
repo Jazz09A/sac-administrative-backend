@@ -38,6 +38,7 @@ class PostgresVisitRepository(VisitRepository):
             )
             .join(Contributor, Visit.contributor_id == Contributor.id)
             .outerjoin(Fiscal, Visit.fiscal_id == Fiscal.id)
+            .where(Visit.deleted_at.is_(None))
         )
         if rif:
             statement = statement.where(Contributor.rif.ilike(f"%{rif}%"))
@@ -71,7 +72,7 @@ class PostgresVisitRepository(VisitRepository):
         result = await self.session.execute(
             select(Visit)
             .options(selectinload(Visit.fiscal))
-            .where(Visit.id == visit_id)
+            .where(Visit.id == visit_id, Visit.deleted_at.is_(None))
         )
         return result.scalar_one_or_none()
 
@@ -86,7 +87,7 @@ class PostgresVisitRepository(VisitRepository):
         skip: int = 0,
         limit: int = 100,
     ) -> list[Visit]:
-        statement = select(Visit).options(selectinload(Visit.fiscal))
+        statement = select(Visit).options(selectinload(Visit.fiscal)).where(Visit.deleted_at.is_(None))
         if contributor_id:
             statement = statement.where(Visit.contributor_id == contributor_id)
         if fiscal_id:
@@ -135,6 +136,18 @@ class PostgresVisitRepository(VisitRepository):
             return None
 
         visit.status = VisitStatus.ATENDIDO
+        self.session.add(visit)
+        await self.session.flush()
+        await self.session.refresh(visit)
+        return visit
+
+    async def soft_delete(self, visit_id: UUID) -> Visit | None:
+        visit = await self.get(visit_id)
+        if not visit:
+            return None
+
+        visit.deleted_at = datetime.utcnow()
+        visit.updated_at = datetime.utcnow()
         self.session.add(visit)
         await self.session.flush()
         await self.session.refresh(visit)
