@@ -155,7 +155,7 @@ class PostgresVisitRepository(VisitRepository):
         visit.updated_at = datetime.utcnow()
         self.session.add(visit)
         await self.session.flush()
-        return await self.get(visit.id)
+        return visit
 
     async def list_history(
         self,
