@@ -163,6 +163,11 @@ Crea contribuyente manualmente por formulario administrativo.
 #### GET `/api/v1/contributors/?skip=0&limit=100`
 Lista contribuyentes.
 
+#### GET `/api/v1/contributors/search/{rif}`
+Busca un contribuyente exacto por su RIF. Útil para autocompletar formularios en el frontend sin crear duplicados.
+- Responde `200` con los datos del contribuyente si existe.
+- Responde `404` si no se encuentra el contribuyente.
+
 #### GET `/api/v1/contributors/{contributor_id}`
 Obtiene contribuyente por ID interno.
 
@@ -309,8 +314,25 @@ Parámetros disponibles:
 - `status` (opcional)
 - `fiscal_id` (opcional)
 - `entry_date` (opcional, formato `YYYY-MM-DD`; por defecto usa el d?a actual en zona horaria de Venezuela)
+- `include_images` (opcional, `true|false`, default `false`; cuando es `true` agrega `photos` con `photo_url` por visita)
 - `skip` (default `0`)
 - `limit` (default `100`)
+
+Ejemplo con imágenes:
+`GET /api/v1/visits/?status=espera&include_images=true&skip=0&limit=20`
+
+Comportamiento de respuesta:
+- Si `include_images=false` (default), responde con `VisitPublic` (sin arreglo `photos`).
+- Si `include_images=true`, responde con `VisitWithPhotosPublic` por cada elemento, incluyendo:
+  - `photos[].visit_id`
+  - `photos[].object_key`
+  - `photos[].bucket`
+  - `photos[].content_type`
+  - `photos[].original_filename`
+  - `photos[].size`
+  - `photos[].id`
+  - `photos[].created_at`
+  - `photos[].photo_url` (URL pública calculada por backend)
 
 #### GET `/api/v1/visits/reports/fiscals?fiscal_id=7&status_filter=espera,atendido&contributor_name=Comercial&rif=J-123&fiscal_status=true&date_from=2026-04-01&date_to=2026-04-30&skip=0&limit=20`
 Reporte administrativo de visitas por fiscal, con filtros combinables y paginación.
@@ -418,6 +440,11 @@ Regla de visibilidad:
 Ejemplo:
 `GET /api/v1/visits/49a5f2a5-889f-4739-bf38-b295d2df07ef`
 
+Parámetros query:
+- `include_images` (opcional, `true|false`, default `false`)
+  - `false`: respuesta `VisitPublic`.
+  - `true`: respuesta `VisitWithPhotosPublic` con arreglo `photos` y `photo_url`.
+
 #### PATCH `/api/v1/visits/{visit_id}`
 Corrige campos de una visita ya registrada (actualizacion parcial).
 
@@ -521,6 +548,75 @@ Parámetros:
 }
 ```
 
+---
+
+### WebSocket (tiempo real)
+Canal para dashboard en tiempo real de visitas (ingresos, atención, salida, edición y borrado lógico).
+
+#### WS `/api/v1/ws/visits`
+- Protocolo: `ws://` (local) o `wss://` (producción).
+- Objetivo: publicar eventos de visitas para clientes conectados.
+- El backend emite mensajes JSON con estructura:
+
+```json
+{
+  "type": "visit.created",
+  "occurred_at": "2026-05-05T13:15:09.214000+00:00",
+  "payload": {}
+}
+```
+
+Eventos disponibles:
+- `visit.created`: emitido al crear ingreso (`POST /api/v1/visits/`).
+- `visit.attended`: emitido al marcar visita atendida (`PATCH /api/v1/visits/{visit_id}/attend`).
+- `visit.updated`: emitido al editar una visita (`PATCH /api/v1/visits/{visit_id}`).
+- `visit.exited`: emitido al registrar salida (`PATCH /api/v1/visits/{visit_id}/exit`).
+- `visit.deleted`: emitido al aplicar soft delete (`DELETE /api/v1/visits/{visit_id}`), payload mínimo:
+
+```json
+{
+  "id": "49a5f2a5-889f-4739-bf38-b295d2df07ef"
+}
+```
+
+Nota de payload:
+- Para `visit.created`, `visit.attended`, `visit.updated` y `visit.exited`, el `payload` corresponde al modelo público de visita que devuelve la API (`VisitWithPhotosPublic` o `VisitPublic`), serializado a JSON.
+  - Incluye `contributor_name` para identificar el contribuyente en el cliente en tiempo real.
+- Para `visit.deleted`, el `payload` solo incluye el `id` de la visita.
+
+#### Test manual realtime (frontend conectado)
+Endpoint util para pruebas manuales en local:
+
+`POST /api/v1/ws/visits/test-notification`
+
+Body:
+```json
+{
+  "event_type": "visit.test",
+  "payload": {
+    "message": "ping desde backend",
+    "source": "manual-test"
+  }
+}
+```
+
+Reglas:
+- Disponible solo en entorno `local/development`.
+- Publica el evento en el mismo canal WS (`/api/v1/ws/visits`) donde escucha el frontend.
+
+Ejemplo cURL:
+```bash
+curl -X POST "http://localhost:8000/api/v1/ws/visits/test-notification" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "event_type": "visit.test",
+    "payload": {
+      "message": "ping desde backend",
+      "source": "manual-test"
+    }
+  }'
+```
+
 ## Ejemplos rápidos con cURL
 
 ### 1) Login (JWT)
@@ -589,8 +685,9 @@ curl -X POST "http://localhost:8000/api/v1/visits/" \
 - `visit_id` ahora es UUID.
 - Visitas usan soft delete con `deleted_at`; para depuración/auditoría se conserva el registro.
 - En `/docs`, el flujo OAuth2 usa `tokenUrl` `POST /api/v1/auth/login` para obtener el bearer token en pruebas interactivas.
-- Última actualización de esta documentación: 2026-05-04.
+- Última actualización de esta documentación: 2026-05-05.
 - **Cambios recientes:**
+  - Nuevo canal WebSocket `WS /api/v1/ws/visits` para eventos en tiempo real de visitas (`visit.created`, `visit.attended`, `visit.updated`, `visit.exited`, `visit.deleted`).
   - Soft delete en visitas: nuevo `DELETE /api/v1/visits/{visit_id}`, nuevo campo `deleted_at`, y filtros para excluir eliminadas en listados/reportes.
   - Patrón Strategy en almacenamiento de archivos: selección de proveedor (`s3`/`supabase`) mediante `create_file_storage_repository` y contrato `FileStorageRepository`.
   - Agregado campo `role` en modelo `User` (valores: `admin`, `user`).

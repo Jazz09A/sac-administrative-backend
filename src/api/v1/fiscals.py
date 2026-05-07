@@ -29,6 +29,17 @@ async def search_fiscals(
     return [FiscalPublic.model_validate(fiscal) for fiscal in fiscals]
 
 
+@router.get("/{fiscal_id}", response_model=FiscalPublic)
+async def get_fiscal_by_id(
+    fiscal_id: int,
+    db: AsyncSession = Depends(get_db),
+) -> FiscalPublic:
+    fiscal_repo = PostgresFiscalRepository(db)
+    fiscal = await fiscal_repo.get_by_id(fiscal_id)
+    if not fiscal:
+        raise HTTPException(status_code=404, detail="Fiscal no encontrado")
+    return FiscalPublic.model_validate(fiscal)
+
 @router.post("/sync", response_model=FiscalSyncSummaryPublic, status_code=status.HTTP_200_OK)
 async def sync_fiscals(
     db: AsyncSession = Depends(get_db),

@@ -14,6 +14,13 @@ from src.models.visit import Visit, VisitStatus, VisitUpdateExit
 
 
 class PostgresVisitRepository(VisitRepository):
+    @staticmethod
+    def _with_relations(statement):
+        return statement.options(
+            selectinload(Visit.fiscal),
+            selectinload(Visit.contributor),
+        )
+
     def _history_base_statement(
         self,
         *,
@@ -66,14 +73,16 @@ class PostgresVisitRepository(VisitRepository):
         self.session.add(db_visit)
         await self.session.flush()
         await self.session.refresh(db_visit)
-        return db_visit
+        created = await self.get(db_visit.id)
+        if created is None:
+            raise RuntimeError("No se pudo recargar la visita creada")
+        return created
 
     async def get(self, visit_id: UUID) -> Visit | None:
-        result = await self.session.execute(
-            select(Visit)
-            .options(selectinload(Visit.fiscal))
-            .where(Visit.id == visit_id, Visit.deleted_at.is_(None))
+        statement = self._with_relations(
+            select(Visit).where(Visit.id == visit_id, Visit.deleted_at.is_(None))
         )
+        result = await self.session.execute(statement)
         return result.scalar_one_or_none()
 
     async def list(
@@ -87,7 +96,7 @@ class PostgresVisitRepository(VisitRepository):
         skip: int = 0,
         limit: int = 100,
     ) -> list[Visit]:
-        statement = select(Visit).options(selectinload(Visit.fiscal)).where(Visit.deleted_at.is_(None))
+        statement = self._with_relations(select(Visit)).where(Visit.deleted_at.is_(None))
         if contributor_id:
             statement = statement.where(Visit.contributor_id == contributor_id)
         if fiscal_id:
@@ -103,8 +112,7 @@ class PostgresVisitRepository(VisitRepository):
         return list(result.scalars().all())
 
     async def register_exit(self, visit_id: UUID, exit_data: VisitUpdateExit) -> Visit | None:
-        visit = await self.get(visit_id)  # ya usa selectinload(fiscal)
-        # Permitir registrar salida si está en ESPERA o ATENDIDO
+        visit = await self.get(visit_id)
         if not visit or visit.status not in (VisitStatus.ESPERA, VisitStatus.ATENDIDO):
             return None
 
@@ -113,8 +121,7 @@ class PostgresVisitRepository(VisitRepository):
         visit.status = exit_data.status or VisitStatus.FINALIZADO
         self.session.add(visit)
         await self.session.flush()
-        await self.session.refresh(visit)
-        return visit
+        return await self.get(visit.id)
 
     async def update(self, visit_id: UUID, visit_data: dict[str, Any]) -> Visit | None:
         visit = await self.get(visit_id)
@@ -127,19 +134,17 @@ class PostgresVisitRepository(VisitRepository):
 
         self.session.add(visit)
         await self.session.flush()
-        # Reload with selectinload to return the currently assigned fiscal.
         return await self.get(visit_id)
 
     async def mark_as_attended(self, visit_id: UUID) -> Visit | None:
-        visit = await self.get(visit_id)  # ya usa selectinload(fiscal)
+        visit = await self.get(visit_id)
         if not visit or visit.status != VisitStatus.ESPERA:
             return None
 
         visit.status = VisitStatus.ATENDIDO
         self.session.add(visit)
         await self.session.flush()
-        await self.session.refresh(visit)
-        return visit
+        return await self.get(visit.id)
 
     async def soft_delete(self, visit_id: UUID) -> Visit | None:
         visit = await self.get(visit_id)
@@ -150,8 +155,7 @@ class PostgresVisitRepository(VisitRepository):
         visit.updated_at = datetime.utcnow()
         self.session.add(visit)
         await self.session.flush()
-        await self.session.refresh(visit)
-        return visit
+        return await self.get(visit.id)
 
     async def list_history(
         self,

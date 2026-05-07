@@ -37,8 +37,13 @@ class ContributorPublic(ContributorBase):
     id: Optional[int] = Field(default=None)
     created_at: Optional[datetime] = None
 
+class ContributorSearchResponse(ContributorPublic):
+    last_fiscal_id: Optional[int] = None
+    last_reason: Optional[str] = None
+
 class Contributor(ContributorBase, table=True):  # type: ignore
     id: Optional[int] = Field(default=None, primary_key=True)
+    rif: str = Field(index=True, unique=True, max_length=20)
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: Optional[datetime] = Field(default_factory=datetime.utcnow)
     

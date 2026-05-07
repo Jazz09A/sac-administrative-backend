@@ -3,7 +3,7 @@
 ```markdown
 # Arquitectura del Backend - Sistema Contribuyentes MVP
 
-**Última modificación:** 2026-05-04 | **Cambios:** Soft delete en visitas (`deleted_at` + `DELETE /visits/{id}`), filtros para excluir borradas en listados/reportes y documentación explícita de patrón Strategy en storage. **Módulos tocados:** `src/models/visit.py`, `src/api/v1/visits.py`, `src/services/visit_service.py`, `src/infrastructure/postgres/visit_postgres_repository.py`, `src/infrastructure/storage/storage_factory.py`, `src/domain/repositories/file_storage_repository.py`, `docs/api_documentation.md`.
+**Última modificación:** 2026-05-07 | **Cambios:** indexación de RIF y nuevo endpoint de búsqueda de contribuyentes para autocompletado en frontend sin duplicados. **Módulos tocados:** `src/models/contributor.py`, `src/api/v1/contributors.py`, `docs/api_documentation.md`, `docs/architecture.md`.
 
 ## 1. Visión General
 Aplicación **FastAPI** modular siguiendo **SOLID** (SRP, OCP, LSP, ISP, DIP) para registro/control de contribuyentes. Enfoque hexagonal: entidades puras -> repositorios -> controllers. **Postgres** async, **uv** deps.
@@ -76,6 +76,7 @@ erDiagram
 | **Models** | Entidades DB puras | `Contributor(SQLModel)`, `VisitOut(BaseModel)` | SQLModel/Pydantic |
 | **CRUD** | Lógica DB (repo pattern) | `get_contributor_by_rif(session: AsyncSession) -> Contributor|None` | Inyecta `AsyncSession` |
 | **API** | Routes + validación | `router.post("/", response_model=VisitOut)` | Depends(get_db, get_current_user) |
+| **Realtime** | Broadcast de eventos WS | `VisitWebSocketManager.publish(event_type, payload)` | FastAPI WebSocket |
 | **Core** | Config/Infra cross-cut | `Settings`, `create_access_token` | Env vars |
 | **Tests** | Verificación unit/int | `test_crud_get_by_rif`, `test_api_post_visit` | TestClient, override_get_db |
 
@@ -97,6 +98,7 @@ API (v1/visits.post) -> Depends(CRUD.create_visit) -> SQLModel.save -> 201 Visit
 | DELETE | `/users/{id}` | Elimina usuario | `204` |
 | POST | `/contributors/` | Crea/busca por RIF | `ContributorOut` |
 | GET | `/contributors/` | Lista/busca rif/nombre | `List[ContributorOut]` |
+| GET | `/contributors/search/{rif}` | Búsqueda exacta por RIF (sin crear duplicado) | `ContributorOut` |
 | GET | `/contributors/{id}` | Detalle | `ContributorOut` |
 | POST | `/visits/` | Registro ingreso + foto | `VisitOut` |
 | GET | `/visits/` | Filtros rif/fecha/status | `List[VisitOut]` |
@@ -104,6 +106,7 @@ API (v1/visits.post) -> Depends(CRUD.create_visit) -> SQLModel.save -> 201 Visit
 | GET | `/visits/history` | Historial administrativo (RIF, contribuyente, registro, depto, motivo, estado, fiscal) con filtros parciales/rango de fechas y paginación (`total/skip/limit/items`) | `VisitHistoryReportResponse` |
 | DELETE | `/visits/{id}` | Borrado lógico de visita (`soft delete`) | `204` |
 | PATCH | `/visits/{id}/exit` | Registra salida | `VisitOut` |
+| WS | `/ws/visits` | Stream en tiempo real de eventos de visitas para dashboard | `event {type, occurred_at, payload}` |
 | GET | `/dashboard/summary` | Métricas día (totales, en espera) | `DashboardSummary` |
 
 **Regla operativa de estados en historial:** por defecto el historial lista solo visitas en `espera` y `atendido`; las `finalizado` se incluyen solo cuando el cliente envía `incluir_finalizados=true`.
@@ -111,6 +114,21 @@ API (v1/visits.post) -> Depends(CRUD.create_visit) -> SQLModel.save -> 201 Visit
 **Regla de soft delete en visitas:** `deleted_at` marca borrado lógico. Las consultas operativas (`get/list/report/history/dashboard`) excluyen registros con `deleted_at` no nulo por defecto.
 
 **Autenticación:** JWT HS256 con tabla `users`. Campo `role` soporta `admin` y `user`.
+
+## 4.2 Tiempo real (WebSocket)
+
+- Endpoint WS: `/api/v1/ws/visits`.
+- Manager de conexiones: `src/realtime/visit_ws_manager.py`.
+- Eventos publicados desde `src/api/v1/visits.py`:
+  - `visit.created`
+  - `visit.attended`
+  - `visit.updated`
+  - `visit.exited`
+  - `visit.deleted`
+- Contrato de mensaje:
+  - `type`: tipo de evento.
+  - `occurred_at`: fecha UTC ISO-8601.
+  - `payload`: entidad serializada (`VisitPublic`/`VisitWithPhotosPublic`) o `{id}` en borrado.
 
 ## 4.1 Patrones de diseño aplicados
 

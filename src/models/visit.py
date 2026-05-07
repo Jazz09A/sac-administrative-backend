@@ -88,6 +88,7 @@ class VisitUpdate(SQLModel):
 
 class VisitPublic(VisitBase):
     id: Optional[UUID] = Field(default=None)
+    contributor_name: Optional[str] = None
     fiscal_name: Optional[str] = None
     exit_date: Optional[date] = None
     exit_time: Optional[time] = None

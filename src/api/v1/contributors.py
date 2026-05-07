@@ -8,11 +8,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.database import get_db
 from src.crud.contributors import (
-    get_contributors, get_contributor, create_contributor, update_contributor
+    get_contributors, get_contributor, create_contributor, update_contributor,
+    get_contributor_by_rif
 )
 from src.models.contributor import (
-    ContributorPublic, ContributorCreate, ContributorUpdate
+    ContributorPublic, ContributorCreate, ContributorUpdate, ContributorSearchResponse
 )
+from sqlmodel import select
+from src.models.visit import Visit
 
 router = APIRouter()
 
@@ -31,6 +34,30 @@ async def read_contributors(
 ) -> List[ContributorPublic]:
     contributors = await get_contributors(db, skip=skip, limit=limit)
     return contributors
+
+@router.get("/search/{rif}", response_model=ContributorSearchResponse)
+async def search_contributor_by_rif(
+    rif: str, db: AsyncSession = Depends(get_db)
+) -> ContributorSearchResponse:
+    """Busca un contribuyente por su RIF. Retorna 404 si no existe."""
+    contributor = await get_contributor_by_rif(db, rif)
+    if not contributor:
+        raise HTTPException(status_code=404, detail="Contribuyente no encontrado")
+        
+    result = await db.execute(
+        select(Visit)
+        .where(Visit.contributor_id == contributor.id)
+        .order_by(Visit.created_at.desc())
+        .limit(1)
+    )
+    last_visit = result.scalar_one_or_none()
+    
+    response_data = contributor.model_dump()
+    if last_visit:
+        response_data["last_fiscal_id"] = last_visit.fiscal_id
+        response_data["last_reason"] = last_visit.reason
+        
+    return ContributorSearchResponse.model_validate(response_data)
 
 @router.get("/{contributor_id}", response_model=ContributorPublic)
 async def read_contributor(
