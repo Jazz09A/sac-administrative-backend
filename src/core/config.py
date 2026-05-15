@@ -3,8 +3,7 @@ Configuración app-wide con Pydantic Settings.
 Última mod: 2026-04-17 09:01 | Changes: DATABASE_URL, SECRET_KEY, Postgres async.
 """
 from functools import lru_cache
-from typing import Any
-from pydantic import model_validator, field_validator
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
@@ -60,29 +59,8 @@ class Settings(BaseSettings):
     SUPABASE_KEY: str = ""
     BUCKET_NAME_SUPABASE: str = ""
 
-    # CORS (from .env - formato JSON o separado por comas)
-    ALLOWED_ORIGINS: Any = []
-
-    @field_validator("ALLOWED_ORIGINS", mode="before")
-    @classmethod
-    def assemble_cors_origins(cls, v: str | list[str]) -> list[str]:
-        import logging
-        logger = logging.getLogger(__name__)
-        
-        if isinstance(v, str) and not v.startswith("["):
-            origins = [i.strip() for i in v.split(",") if i.strip()]
-            logger.info(f"[CORS-PARSE] Detectado formato CSV. Orígenes: {origins}")
-            return origins
-        elif isinstance(v, str) and v.startswith("["):
-            import json
-            try:
-                origins = json.loads(v)
-                logger.info(f"[CORS-PARSE] Detectado formato JSON. Orígenes: {origins}")
-                return origins
-            except Exception as e:
-                logger.error(f"[CORS-PARSE] Error parseando JSON de ALLOWED_ORIGINS: {e}")
-                return []
-        return v
+    # CORS - se guarda como string crudo, se parsea en main.py
+    ALLOWED_ORIGINS: str = ""
 
     @model_validator(mode="after")
     def validate_storage_settings(self) -> "Settings":

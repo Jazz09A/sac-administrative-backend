@@ -41,10 +41,28 @@ app = FastAPI(
 )
 
 # CORS (frontend React)
-logger.info(f"[CORS] Orígenes permitidos: {settings.ALLOWED_ORIGINS}")
+# Parsear ALLOWED_ORIGINS: soporta JSON ["a","b"] o CSV a,b,c
+import json as _json
+
+_raw = settings.ALLOWED_ORIGINS
+logger.warning(f"[CORS] Raw ALLOWED_ORIGINS value: '{_raw}'")
+
+if _raw.strip().startswith("["):
+    try:
+        _origins: list[str] = _json.loads(_raw)
+        logger.warning(f"[CORS] Parseado como JSON: {_origins}")
+    except Exception as e:
+        logger.error(f"[CORS] Error parseando JSON: {e}")
+        _origins = []
+else:
+    _origins = [o.strip() for o in _raw.split(",") if o.strip()]
+    logger.warning(f"[CORS] Parseado como CSV: {_origins}")
+
+logger.warning(f"[CORS] Orígenes finales ({len(_origins)}): {_origins}")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins= settings.ALLOWED_ORIGINS,
+    allow_origins=_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
