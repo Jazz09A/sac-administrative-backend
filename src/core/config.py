@@ -3,6 +3,7 @@ Configuración app-wide con Pydantic Settings.
 Última mod: 2026-04-17 09:01 | Changes: DATABASE_URL, SECRET_KEY, Postgres async.
 """
 from functools import lru_cache
+from typing import Any
 from pydantic import model_validator, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -60,7 +61,7 @@ class Settings(BaseSettings):
     BUCKET_NAME_SUPABASE: str = ""
 
     # CORS (from .env - formato JSON o separado por comas)
-    ALLOWED_ORIGINS: list[str] = []
+    ALLOWED_ORIGINS: Any = []
 
     @field_validator("ALLOWED_ORIGINS", mode="before")
     @classmethod
