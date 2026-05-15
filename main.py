@@ -41,6 +41,7 @@ app = FastAPI(
 )
 
 # CORS (frontend React)
+logger.info(f"[CORS] Orígenes permitidos: {settings.ALLOWED_ORIGINS}")
 app.add_middleware(
     CORSMiddleware,
     allow_origins= settings.ALLOWED_ORIGINS,
