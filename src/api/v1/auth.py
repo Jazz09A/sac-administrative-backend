@@ -11,8 +11,14 @@ from pydantic import BaseModel, Field
 
 from src.core.config import get_settings
 from src.core.database import get_db
-from src.core.security import create_access_token, create_refresh_token, verify_password, get_current_user
-from src.crud.users import get_user_by_person_id, update_last_login, update_refresh_token
+from src.core.security import (
+    CurrentUser,
+    create_access_token,
+    create_refresh_token,
+    get_current_user,
+    verify_password,
+)
+from src.crud.users import get_user_by_email, get_user_by_person_id, update_last_login, update_refresh_token
 
 router = APIRouter()
 settings = get_settings()
@@ -28,12 +34,16 @@ class TokenResponse(BaseModel):
     refresh_token: str
     token_type: str = "bearer"
     role: str
+    full_name: str
 
 
 class MeResponse(BaseModel):
+    id: str
     fullName: str
+    full_name: str
     role: str
     username: str
+    person_id: str
 
 
 @router.post("/login", response_model=TokenResponse)
@@ -41,7 +51,12 @@ async def login(
     body: LoginRequest,
     db: AsyncSession = Depends(get_db),
 ) -> TokenResponse:
-    user = await get_user_by_person_id(db, body.person_id)
+    person_id = body.person_id.strip().upper()
+    user = await get_user_by_person_id(db, person_id)
+    if user is None and person_id.isdigit():
+        user = await get_user_by_person_id(db, f"V{person_id}")
+    if user is None and "@" in body.person_id:
+        user = await get_user_by_email(db, body.person_id)
     if not user or not verify_password(body.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -64,13 +79,14 @@ async def login(
     return TokenResponse(
         access_token=access_token,
         refresh_token=refresh_token,
-        role=user.role
+        role=user.role,
+        full_name=user.full_name,
     )
 
 
 @router.get("/me", response_model=MeResponse)
 async def get_me(
-    current_user: dict = Depends(get_current_user),
+    current_user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> MeResponse:
     """Obtiene los datos del usuario autenticado."""
@@ -79,7 +95,10 @@ async def get_me(
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
 
     return MeResponse(
+        id=str(user.id),
         fullName=user.full_name,
+        full_name=user.full_name,
         role=user.role,
-        username=user.person_id
+        username=user.person_id,
+        person_id=user.person_id,
     )

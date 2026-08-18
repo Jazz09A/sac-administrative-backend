@@ -9,6 +9,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 from src.models.contributor import Contributor, ContributorCreate, ContributorType, ContributorUpdate, ContributorPublic
 
+async def get_contributor_by_cedula(
+    session: AsyncSession, cedula: str
+) -> Optional[Contributor]:
+    normalized = cedula.strip()
+    if not normalized:
+        return None
+    result = await session.execute(
+        select(Contributor).where(Contributor.cedula == normalized)
+    )
+    return result.scalar_one_or_none()
+
+
 async def get_contributor_by_rif(
     session: AsyncSession, rif: str
 ) -> Optional[Contributor]:
@@ -39,11 +51,56 @@ async def get_contributors(
 async def create_contributor(
     session: AsyncSession, contributor_in: ContributorCreate
 ) -> Contributor:
-    """Create new or get existing by RIF (get_or_create pattern)."""
-    contributor = await get_contributor_by_rif(session, contributor_in.rif)
-    if contributor:
-        return contributor  # Idempotent
+    """Create new or get existing by cédula, then RIF (get_or_create)."""
+    if contributor_in.cedula:
+        contributor = await get_contributor_by_cedula(session, contributor_in.cedula)
+        if contributor:
+            return contributor
+    if contributor_in.rif:
+        contributor = await get_contributor_by_rif(session, contributor_in.rif)
+        if contributor:
+            return contributor
     db_contributor = Contributor.model_validate(contributor_in)
+    session.add(db_contributor)
+    await session.commit()
+    await session.refresh(db_contributor)
+    return db_contributor
+
+
+async def get_or_create_contributor_by_cedula(
+    session: AsyncSession,
+    cedula: str,
+    *,
+    name: str | None = None,
+    rif: str | None = None,
+) -> Contributor:
+    """Resolve contributor by cédula; create minimal row without requiring RIF or name."""
+    normalized = cedula.strip()
+    if not normalized:
+        raise ValueError("Cédula es obligatoria")
+    if rif and rif.strip().upper().startswith("TEMP-"):
+        raise ValueError("RIF temporal no permitido")
+    existing = await get_contributor_by_cedula(session, normalized)
+    if existing:
+        return existing
+    normalized_rif = rif.strip() if rif else None
+    if normalized_rif:
+        by_rif = await get_contributor_by_rif(session, normalized_rif)
+        if by_rif is not None:
+            if by_rif.cedula and by_rif.cedula != normalized:
+                raise ValueError("El RIF ya está registrado en otro contribuyente")
+            if not by_rif.cedula:
+                by_rif.cedula = normalized
+                session.add(by_rif)
+                await session.commit()
+                await session.refresh(by_rif)
+            return by_rif
+    db_contributor = Contributor(
+        cedula=normalized,
+        rif=normalized_rif or None,
+        name=name.strip() if name else None,
+        type=ContributorType.NATURAL,
+    )
     session.add(db_contributor)
     await session.commit()
     await session.refresh(db_contributor)

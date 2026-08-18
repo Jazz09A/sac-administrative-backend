@@ -1,13 +1,15 @@
-from typing import Any
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field
 
 from src.core.config import Settings, get_settings
-
+from src.core.security import OPERATOR_ROLES, CurrentUser, get_current_user, verify_token
 from src.realtime.visit_ws_manager import visit_ws_manager
 
 router = APIRouter()
+CurrentOperator = Annotated[CurrentUser, Depends(get_current_user)]
+AppSettings = Annotated[Settings, Depends(get_settings)]
 
 
 class VisitWsTestNotificationIn(BaseModel):
@@ -15,8 +17,24 @@ class VisitWsTestNotificationIn(BaseModel):
     payload: dict[str, Any] = Field(default_factory=dict)
 
 
+def _websocket_token(websocket: WebSocket) -> str:
+    query_token = websocket.query_params.get("access_token")
+    if query_token:
+        return query_token
+    authorization = websocket.headers.get("authorization") or ""
+    scheme, _, token = authorization.partition(" ")
+    if scheme.lower() == "bearer" and token:
+        return token
+    return ""
+
+
 @router.websocket("/visits")
 async def visits_dashboard_websocket(websocket: WebSocket) -> None:
+    user = await verify_token(_websocket_token(websocket))
+    if not user or user.role not in OPERATOR_ROLES:
+        await websocket.close(code=4401)
+        return
+
     await visit_ws_manager.connect(websocket)
     try:
         while True:
@@ -31,7 +49,8 @@ async def visits_dashboard_websocket(websocket: WebSocket) -> None:
 @router.post("/visits/test-notification")
 async def publish_test_visit_notification(
     body: VisitWsTestNotificationIn,
-    settings: Settings = Depends(get_settings),
+    settings: AppSettings,
+    _: CurrentOperator,
 ) -> dict[str, str]:
     if not settings.is_local:
         raise HTTPException(

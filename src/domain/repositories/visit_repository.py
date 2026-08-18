@@ -1,8 +1,10 @@
-from typing import Any, List, Protocol
+from __future__ import annotations
+
 from datetime import date
+from typing import Any, Protocol
 from uuid import UUID
 
-from src.models.visit import Visit, VisitStatus, VisitUpdate, VisitUpdateExit
+from src.models.visit import Visit, VisitStatus
 
 
 class VisitRepository(Protocol):
@@ -20,13 +22,11 @@ class VisitRepository(Protocol):
         status: str | None = None,
         fiscal_id: int | None = None,
         entry_date: date | None = None,
+        open_only: bool = False,
         skip: int = 0,
         limit: int = 100,
     ) -> list[Visit]:
-        """List visits with optional filters."""
-
-    async def register_exit(self, visit_id: UUID, exit_data: VisitUpdateExit) -> Visit | None:
-        """Register visit exit."""
+        """List visits with optional filters. open_only = sin exit_at y no finalizado."""
 
     async def update(self, visit_id: UUID, visit_data: dict[str, Any]) -> Visit | None:
         """Update editable visit fields."""
@@ -46,10 +46,10 @@ class VisitRepository(Protocol):
         department: str | None = None,
         date_from: date | None = None,
         date_to: date | None = None,
-        status_list: List[VisitStatus] | None = None,
+        status_list: list[VisitStatus] | None = None,
         skip: int = 0,
         limit: int = 100,
-    ) -> List[dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """List visits history with report-friendly columns."""
 
     async def count_history(
@@ -61,6 +61,15 @@ class VisitRepository(Protocol):
         department: str | None = None,
         date_from: date | None = None,
         date_to: date | None = None,
-        status_list: List[VisitStatus] | None = None,
+        status_list: list[VisitStatus] | None = None,
     ) -> int:
         """Count visits history using same filters."""
+
+    async def allocate_next_ticket(self, entry_date: date) -> str:
+        """Lock + next T-YYYYMMDD-NNNN for that date (incluye borradas)."""
+
+    async def list_queue(self, *, department: str | None = None) -> list[Visit]:
+        """Visitas en espera y en atención, FIFO por created_at."""
+
+    async def list_by_entry_date(self, target_date: date) -> list[Visit]:
+        """Visitas activas del día de ingreso (sin paginar)."""

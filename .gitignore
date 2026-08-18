@@ -14,4 +14,5 @@
 alembic/
 tools/
 
+data/storage/
 __pycache__/

@@ -1,155 +1,177 @@
-## docs/architecture.md
+# Arquitectura — API administrativa SENIAT
 
-```markdown
-# Arquitectura del Backend - Sistema Contribuyentes MVP
+**Última modificación:** 2026-08-17 | TASK-001–003 (alta por cédula, intake en taquilla, salida abierta) documentados contra routers en `src/api/v1/`.
 
-**Última modificación:** 2026-05-07 | **Cambios:** indexación de RIF y nuevo endpoint de búsqueda de contribuyentes para autocompletado en frontend sin duplicados. **Módulos tocados:** `src/models/contributor.py`, `src/api/v1/contributors.py`, `docs/api_documentation.md`, `docs/architecture.md`.
+## 1. Visión
 
-## 1. Visión General
-Aplicación **FastAPI** modular siguiendo **SOLID** (SRP, OCP, LSP, ISP, DIP) para registro/control de contribuyentes. Enfoque hexagonal: entidades puras -> repositorios -> controllers. **Postgres** async, **uv** deps.
+Un Postgres, una API FastAPI (`sac-administrative-backend/`), una web Next.js (`sac-access-control/`) en LAN on-premise.
 
-**Principio:** Cada módulo tiene responsabilidad única. IAs/agentes: lean CLAUDE.md para generar código coherente.
+Identidad en alta de garita: **cédula + plantilla facial**. RIF y nombre se completan en taquilla (`PATCH /visits/{id}/intake`). FACE-R (`app/`) es prototipo del motor; el kiosko de producto es Next `/gate` (MediaPipe local).
 
-## 2. Diagrama ER (Postgres)
+Storage **local por defecto**. S3/Supabase no son obligatorios.
+
+## 2. Límites de sistema
+
+| Hay | No hay (esta iteración) |
+|-----|-------------------------|
+| JWT en biometrics, visits, contributors, dashboard, fiscals, assets, WS | Ticket térmico |
+| Bienes = patrimonio institucional (`seniat_assets*`) | Pertenencias del contribuyente en bienes |
+| Export CSV de bienes (stdlib `csv`) | Excel / PDF |
+| LBPH + recortes periocular/nariz | ArcFace / GPU |
+| `create_all` + unique index de ticket al arranque | Migraciones Alembic versionadas en git |
+
+`alembic/` está gitignored. `create_all` **no ALTER** un Postgres ya creado: columnas nuevas (p. ej. `ticket_no`, `cedula`, tablas de bienes) y nullability de `Contributor.rif`/`name` y `Visit.reason` no aparecen solas en una base vieja. Recrear Postgres o ALTER manual.
+
+## 3. Diagrama de dominio (Postgres)
 
 ```mermaid
 erDiagram
     USERS {
         uuid id PK
         varchar person_id UNIQUE
-        varchar full_name
-        varchar email UNIQUE
-        varchar hashed_password
-        varchar role "admin|user"
+        varchar role "admin|user|gate|officer|manager"
+        varchar refresh_token
         boolean is_active
-        timestamp last_login_at
-        timestamp created_at
-        timestamp updated_at
     }
-    CONTRIBUTORS {
-        uuid id PK
-        varchar rif UNIQUE
-        varchar name
-        enum type "natural|juridica|representante|gestor"
-        varchar occupation
-        varchar phone
-        varchar email
-        timestamp created_at
-        timestamp updated_at
+    CONTRIBUTOR {
+        int id PK
+        varchar rif UNIQUE "nullable; unique permite NULL"
+        varchar cedula UNIQUE "nullable"
+        varchar name "nullable"
     }
-    VISITS {
-        uuid id PK
-        uuid contributor_id FK
-        text reason
-        text observations
-        varchar received_by
-        varchar department
-        varchar file_number
-        date entry_date
-        time entry_time
-        date exit_date
-        time exit_time
-        enum status "espera|atendido|finalizado|rechazado|reprogramado"
-        varchar signature_image_url
-        timestamp created_at
-        timestamp updated_at
-        timestamp deleted_at
+    FACE_TEMPLATES {
+        int id PK
+        int contributor_id FK
+        varchar region "full|periocular|nose"
+        boolean glasses
+        bytes embedding
     }
-    PHOTOS {
+    VISIT {
         uuid id PK
+        int contributor_id FK
+        int fiscal_id FK "nullable"
+        varchar ticket_no UNIQUE "T-YYYYMMDD-NNNN"
+        varchar reason "nullable"
+        varchar status "espera|en_atencion|atendido|incompleto|remitido|finalizado|..."
+        datetime called_at
+        datetime closed_at
+        datetime exit_at
+        datetime deleted_at
+    }
+    PHOTO {
+        int id PK
         uuid visit_id FK
-        varchar photo_url
-        timestamp created_at
+        varchar object_key
+        varchar bucket
+    }
+    SENIAT_ASSETS {
+        uuid id PK
+        varchar inventory_code UNIQUE
+        varchar serial UNIQUE
+        varchar status "in_sede|assigned|in_transit_out"
+        uuid assigned_user_id FK
+        varchar photo_object_key
+    }
+    SENIAT_ASSET_ASSIGNMENTS {
+        int id PK
+        uuid asset_id FK
+        uuid user_id FK
+    }
+    SENIAT_ASSET_MOVEMENTS {
+        uuid id PK
+        uuid asset_id FK
+        uuid carrier_user_id FK
+        uuid visit_id FK "opcional"
+        varchar direction "out|in"
+        varchar status "open|closed"
     }
 
-    USERS ||--o{ VISITS : "registra"
-    CONTRIBUTORS ||--o{ VISITS : "tiene"
-    VISITS ||--o{ PHOTOS : "evidencia"
+    CONTRIBUTOR ||--o{ VISIT : tiene
+    CONTRIBUTOR ||--o{ FACE_TEMPLATES : galeria
+    VISIT ||--o{ PHOTO : evidencia
+    USERS ||--o{ SENIAT_ASSET_ASSIGNMENTS : funcionario
+    SENIAT_ASSETS ||--o{ SENIAT_ASSET_ASSIGNMENTS : asignacion
+    SENIAT_ASSETS ||--o{ SENIAT_ASSET_MOVEMENTS : movimiento
+    VISIT ||--o{ SENIAT_ASSET_MOVEMENTS : traza_opcional
 ```
 
-**Indexes clave:** rif (contributors), status+entry_date (visits), deleted_at (visits para exclusión por soft delete).
+El bien **no** tiene `contributor_id`. Un movimiento puede ligarse a una visita solo para trazar salida/retorno de equipo SENIAT.
 
-## 3. Capas Arquitectónicas (SOLID)
+## 4. Capas
 
-| Capa | Responsabilidad (SRP) | Ejemplos | DIP (Dependencias) |
-|------|-----------------------|----------|--------------------|
-| **Models** | Entidades DB puras | `Contributor(SQLModel)`, `VisitOut(BaseModel)` | SQLModel/Pydantic |
-| **CRUD** | Lógica DB (repo pattern) | `get_contributor_by_rif(session: AsyncSession) -> Contributor|None` | Inyecta `AsyncSession` |
-| **API** | Routes + validación | `router.post("/", response_model=VisitOut)` | Depends(get_db, get_current_user) |
-| **Realtime** | Broadcast de eventos WS | `VisitWebSocketManager.publish(event_type, payload)` | FastAPI WebSocket |
-| **Core** | Config/Infra cross-cut | `Settings`, `create_access_token` | Env vars |
-| **Tests** | Verificación unit/int | `test_crud_get_by_rif`, `test_api_post_visit` | TestClient, override_get_db |
+| Capa | Rol | Ejemplos |
+|------|-----|----------|
+| API | Rutas FastAPI | `src/api/v1/{auth,visits,biometrics,assets,ws,...}.py` |
+| Servicios | Flujo de negocio | `VisitService`, `AssetService`, `services/biometrics/` |
+| Repositorios | Postgres / disco | `visit_postgres_repository`, `local_repository` |
+| Modelos | SQLModel | `visit`, `contributor`, `face_template`, `asset`, `user` |
+| Core | Config, JWT, DB | `config.py`, `security.py`, `database.py` |
+| Realtime | Broadcast WS | `src/realtime/visit_ws_manager.py` |
 
-**Flujo request típico (registro ingreso):**
-```
-API (v1/visits.post) -> Depends(CRUD.create_visit) -> SQLModel.save -> 201 VisitOut
-```
+Prefijo: `API_V1_STR=/api/v1` (`main.py` incluye `api_router`). Health: `GET /health` (público).
 
-## 4. Endpoints MVP (OpenAPI auto-docs)
+## 5. Auth y roles
 
-| Método | Endpoint | Descripción | Response |
-|--------|----------|-------------|----------|
-| POST | `/auth/login` | Login JWT (person_id + password) | `TokenResponse` |
-| GET | `/auth/me` | Datos del usuario autenticado | `MeResponse` |
-| POST | `/users/` | Crea usuario (admin/user) | `UserPublic` |
-| GET | `/users/` | Lista usuarios | `List[UserPublic]` |
-| GET | `/users/{id}` | Detalle usuario | `UserPublic` |
-| PUT | `/users/{id}` | Actualiza usuario (incluye `role`) | `UserPublic` |
-| DELETE | `/users/{id}` | Elimina usuario | `204` |
-| POST | `/contributors/` | Crea/busca por RIF | `ContributorOut` |
-| GET | `/contributors/` | Lista/busca rif/nombre | `List[ContributorOut]` |
-| GET | `/contributors/search/{rif}` | Búsqueda exacta por RIF (sin crear duplicado) | `ContributorOut` |
-| GET | `/contributors/{id}` | Detalle | `ContributorOut` |
-| POST | `/visits/` | Registro ingreso + foto | `VisitOut` |
-| GET | `/visits/` | Filtros rif/fecha/status | `List[VisitOut]` |
-| GET | `/visits/reports/fiscals` | Reporte por fiscal con filtros por fecha, contribuyente, RIF, estado de visita y estado activo/inactivo del fiscal + paginación (`total/skip/limit/items`) | `FiscalVisitsReportResponse` |
-| GET | `/visits/history` | Historial administrativo (RIF, contribuyente, registro, depto, motivo, estado, fiscal) con filtros parciales/rango de fechas y paginación (`total/skip/limit/items`) | `VisitHistoryReportResponse` |
-| DELETE | `/visits/{id}` | Borrado lógico de visita (`soft delete`) | `204` |
-| PATCH | `/visits/{id}/exit` | Registra salida | `VisitOut` |
-| WS | `/ws/visits` | Stream en tiempo real de eventos de visitas para dashboard | `event {type, occurred_at, payload}` |
-| GET | `/dashboard/summary` | Métricas día (totales, en espera) | `DashboardSummary` |
+- JWT HS256. Login público: `POST /api/v1/auth/login`.
+- `OPERATOR_ROLES` = `admin|user|gate|officer|manager`. `require_operator` incluye los cinco (también `user`).
+- `require_admin`: solo `admin` — CRUD users, delete visita, `POST /fiscals/sync`, POST/PATCH/DELETE catálogo bienes.
+- `GET /api/v1/auth/me` incluye `id` (UUID) para carrier / “asignarme”.
+- `REQUIRE_AUTH` en settings **no se consulta** en Depends: las rutas con `require_*` siempre piden JWT.
 
-**Regla operativa de estados en historial:** por defecto el historial lista solo visitas en `espera` y `atendido`; las `finalizado` se incluyen solo cuando el cliente envía `incluir_finalizados=true`.
+Deuda media conocida:
 
-**Regla de soft delete en visitas:** `deleted_at` marca borrado lógico. Las consultas operativas (`get/list/report/history/dashboard`) excluyen registros con `deleted_at` no nulo por defecto.
+- Refresh token en claro (`users.refresh_token`)
+- `verify_token` no recarga `is_active`/`role` desde DB
+- BFF Next `GET /api/auth/session` entrega el JWT al JS (superficie XSS)
+- Tras cambiar el secreto JWT hay que volver a iniciar sesión
 
-**Autenticación:** JWT HS256 con tabla `users`. Campo `role` soporta `admin` y `user`.
+## 6. Storage
 
-## 4.2 Tiempo real (WebSocket)
+Estrategia: `FileStorageRepository` + fábrica (`STORAGE_PROVIDER`: `local` | `s3` | `supabase`).
 
-- Endpoint WS: `/api/v1/ws/visits`.
-- Manager de conexiones: `src/realtime/visit_ws_manager.py`.
-- Eventos publicados desde `src/api/v1/visits.py`:
-  - `visit.created`
-  - `visit.attended`
-  - `visit.updated`
-  - `visit.exited`
-  - `visit.deleted`
-- Contrato de mensaje:
-  - `type`: tipo de evento.
-  - `occurred_at`: fecha UTC ISO-8601.
-  - `payload`: entidad serializada (`VisitPublic`/`VisitWithPhotosPublic`) o `{id}` en borrado.
+Local (`src/infrastructure/storage/local_repository.py`):
 
-## 4.1 Patrones de diseño aplicados
+- Base: `LOCAL_STORAGE_PATH` (default `data/storage`)
+- Rechaza keys absolutas y segmentos `..`
+- `get_public_url` arma `{LOCAL_STORAGE_PUBLIC_URL}/{key}` (default `/api/v1/files/...`)
 
-- **Strategy (Storage Provider):**
-  - Contrato: `FileStorageRepository` define `upload`, `delete` y `get_public_url`.
-  - Estrategias concretas: `S3FileStorageRepository` y `SupabaseFileStorageRepository`.
-  - Contexto/fábrica: `create_file_storage_repository(settings)` selecciona la estrategia según `settings.STORAGE_PROVIDER`.
-  - Beneficio: desacopla la lógica de negocio del proveedor de almacenamiento y facilita extensión sin modificar servicios consumidores (OCP + DIP).
+**Hueco:** no existe router que sirva `/api/v1/files`. Las fotos se escriben a disco; no documentar “la foto se ve al recargar” como comportamiento actual.
 
-## 5. Buenas Prácticas Obligatorias
-- **Pydantic everywhere**: `response_model=List[VisitPublic]`, `Body(VisitCreate)`.
-- **Async todo**: `async def get_visits(...)`.
-- **Error handling**: HTTPException(404, "Contribuyente no encontrado").
-- **Tests 80%+**: `pytest --cov=src`.
-- **Migrations**: `alembic revision --autogenerate -m "add visit status"`.
+**Hueco visitas:** `POST /visits/` aún exige `BUCKET_NAME_S3` o `BUCKET_NAME_SUPABASE` como metadato aunque el provider sea `local`. El archivo sí puede ir a disco; el bucket vacío aborta el ingreso con 500.
 
-## 6. Deploy & DevOps
-- **CI/CD**: GitHub Actions (uv sync -> test -> deploy Render).
-- **Monitoring**: Prometheus? Future.
+## 7. Flujo de visitas (taquilla nueva)
 
-**Próximo cambio esperado:** formalizar transición de estados en endpoint dedicado de atención (paso a `atendido`) y desacoplar cierre administrativo (`finalizado`).
-```
+1. Garita `POST /visits/` (cédula + foto + departamento; RIF/nombre/motivo/fiscal opcionales y el kiosko no los envía) → `ticket_no` `T-YYYYMMDD-NNNN` (lock `pg_advisory_xact_lock` + unique index) + status `espera`
+2. Cola `GET /visits/queue` (UI: etiqueta = nombre o, si falta, cédula)
+3. Llamar `PATCH /visits/{id}/call` → `en_atencion` + `called_at`
+4. Intake `PATCH /visits/{id}/intake` `{name, reason, rif?}`
+5. Cerrar `PATCH /visits/{id}/close` `{status: atendido|incompleto|remitido}` + `closed_at` (exige nombre y motivo)
+6. Salida: `GET /visits/?cedula=...&open=true` (sin default de hoy; abiertas = sin `exit_at` y no `finalizado`). Si hay una sola, la garita hace `PATCH /visits/{id}/exit` automático. Exit → **siempre** `finalizado` + `exit_at` (permitido desde `espera|en_atencion|atendido|incompleto|remitido`). `stay_seconds` en `VisitPublic`.
 
-Este architecture.md es **referencia viva**: edítalo **siempre** post-cambio (ej. "2026-04-18 | Añadí auth. Módulos: core/security.py").
+`PATCH /visits/{id}/attend` existe (espera → atendido, evento `visit.attended`) para consola vieja. **No usarlo en taquilla nueva.**
+
+No hay RIF sintético `TEMP-`/`PEND-` en el flujo.
+
+## 8. Biometría
+
+`POST /api/v1/biometrics/recognize` y `/enroll` (operador). Imagen base64: magic bytes JPEG/PNG/WEBP, máx. 10 MB, landmarks 400–478.
+
+- Enroll: **cédula obligatoria**; `rif` y `name` opcionales. El kiosko no los envía.
+- Boca ocluida → región periocular
+- Hint `glasses` filtra plantillas con flag glasses
+- Ambos ojos no visibles → `needs_document` + `fallback=cedula_rif` (el kiosko pide solo cédula)
+- Motor: OpenCV LBPH. No ArcFace/GPU
+
+## 9. Bienes institucionales
+
+CRUD `/api/v1/assets`, foto, assign, release, movements `out|in` (`carrier_user_id` = funcionario, `visit_id` opcional), `GET /alerts/open-out`, `GET /export.csv`.
+
+Alta/edición/baja del catálogo: admin. Consulta y movimientos: operador.
+
+## 10. Tiempo real
+
+`WS /api/v1/ws/visits`. Token: query `access_token` o header `Authorization: Bearer`. Código de cierre `4401` si el token es inválido o el rol no es operador.
+
+Eventos publicados desde visitas: `visit.created`, `visit.called`, `visit.closed`, `visit.exited`, `visit.updated`, más legado `visit.attended` y `visit.deleted`.
+
+Mensaje: `{ type, occurred_at, payload }`. `POST /ws/visits/test-notification` solo si `ENVIRONMENT` es local/dev.

@@ -2,18 +2,22 @@
 Database session async Postgres.
 Última mod: 2026-04-17 09:01 | Changes: AsyncSession engine.
 """
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
-from sqlmodel import SQLModel
 from contextlib import asynccontextmanager
 
-from .config import get_settings
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlmodel import SQLModel
 
 # Ensure SQLModel registry loads all mapped classes.
+import src.models.asset  # noqa: F401
 import src.models.contributor  # noqa: F401
+import src.models.face_template  # noqa: F401
 import src.models.fiscal  # noqa: F401
 import src.models.photo  # noqa: F401
 import src.models.user  # noqa: F401
 import src.models.visit  # noqa: F401
+
+from .config import get_settings
 
 settings = get_settings()
 
@@ -24,6 +28,9 @@ async def init_db():
     """Crea tables (dev only) y usuario admin inicial."""
     async with engine.begin() as conn:
         await conn.run_sync(SQLModel.metadata.create_all)
+        await conn.execute(
+            text("CREATE UNIQUE INDEX IF NOT EXISTS ix_visit_ticket_no ON visit (ticket_no)")
+        )
     
     # Crear usuario admin inicial si no existe
     await _create_initial_admin()
@@ -32,8 +39,9 @@ async def init_db():
 async def _create_initial_admin():
     """Crea un usuario admin por defecto si no existe ninguno."""
     from sqlmodel import select
-    from src.models.user import User
+
     from src.core.security import hash_password
+    from src.models.user import User
     
     async with AsyncSessionLocal() as session:
         # Verificar si ya existe un admin

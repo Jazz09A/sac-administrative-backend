@@ -3,8 +3,10 @@ Configuración app-wide con Pydantic Settings.
 Última mod: 2026-04-17 09:01 | Changes: DATABASE_URL, SECRET_KEY, Postgres async.
 """
 from functools import lru_cache
+
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -39,11 +41,13 @@ class Settings(BaseSettings):
     AUTH_PASSWORD: str 
     ADMIN_EMAIL: str 
 
-    # Feature flags MVP
-    REQUIRE_AUTH: bool = False  # Future JWT
+    # JWT obligatorio en la API (login y health quedan públicos).
+    REQUIRE_AUTH: bool = True
 
-    # Cloud storage (Cloudflare R2 / S3 compatible)
-    STORAGE_PROVIDER: str = "s3"  # "s3" or "supabase"
+    # Storage: on-premise default is local disk. s3/supabase remain optional.
+    STORAGE_PROVIDER: str = "local"  # "local" | "s3" | "supabase"
+    LOCAL_STORAGE_PATH: str = "data/storage"
+    LOCAL_STORAGE_PUBLIC_URL: str = "/api/v1/files"
     URL_BUCKET_S3: str = ""
     ACCESS_KEY_S3: str = ""
     TOKEN_VALUE_S3: str = ""
@@ -66,8 +70,11 @@ class Settings(BaseSettings):
     def validate_storage_settings(self) -> "Settings":
         provider = self.STORAGE_PROVIDER.strip().lower()
 
-        if provider not in {"s3", "supabase"}:
-            raise ValueError("STORAGE_PROVIDER debe ser 's3' o 'supabase'")
+        if provider not in {"local", "s3", "supabase"}:
+            raise ValueError("STORAGE_PROVIDER debe ser 'local', 's3' o 'supabase'")
+
+        if provider == "local" and not self.LOCAL_STORAGE_PATH.strip():
+            raise ValueError("LOCAL_STORAGE_PATH es obligatorio para STORAGE_PROVIDER=local")
 
         if provider == "supabase":
             supabase_url = self.SUPABASE_URL.strip().rstrip("/")
@@ -86,6 +93,6 @@ class Settings(BaseSettings):
 
         return self
 
-@lru_cache()
+@lru_cache
 def get_settings() -> Settings:
     return Settings()

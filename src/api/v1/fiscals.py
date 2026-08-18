@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.database import get_db
 from src.core.mysql_database import get_mysql_db
+from src.core.security import require_admin, require_operator
 from src.infrastructure.mysql.fiscal_source_mysql_repository import MySQLFiscalSourceRepository
 from src.infrastructure.postgres.fiscal_postgres_repository import PostgresFiscalRepository
 from src.infrastructure.postgres.fiscal_sync_run_postgres_repository import (
@@ -12,7 +13,7 @@ from src.models.fiscal import FiscalPublic, FiscalSyncRunPublic, FiscalSyncSumma
 from src.services.fiscal_query_service import FiscalQueryService
 from src.services.fiscal_sync_service import FiscalSyncService
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_operator)])
 
 
 @router.get("/", response_model=list[FiscalPublic])
@@ -44,6 +45,7 @@ async def get_fiscal_by_id(
 async def sync_fiscals(
     db: AsyncSession = Depends(get_db),
     mysql_db: AsyncSession = Depends(get_mysql_db),
+    _: object = Depends(require_admin),
 ) -> FiscalSyncSummaryPublic:
     source_repo = MySQLFiscalSourceRepository(mysql_db)
     fiscal_repo = PostgresFiscalRepository(db)

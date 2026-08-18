@@ -1,30 +1,25 @@
-# Contexto IA para Sistema Contribuyentes
+# Contexto IA — API administrativa SENIAT
 
-**Última mod:** 2026-04-17 | **Cambios:** Init. Módulos: todos.
+**Última mod:** 2026-08-17 | Stack de producción: FastAPI + Postgres + storage local. UI de producto: `sac-access-control/` (Next), no el prototipo `app/`.
 
-## Reglas Estrictas
-- **uv only**: `uv add/rm/sync`. pyproject.toml [tool.uv] locked.
-- **SOLID**: SRP (crud solo DB, api solo routes), DIP (interfaces via protocols).
-- **Clases definidas**: SQLModel hereda BaseModel, Pydantic ResponseModels tipadas.
-- **Modular**: src/api/v1/{entity}.py | crud/{entity}.py | models/{entity}.py.
-- **Postgres**: AsyncSession, indexes en rif/date/status.
-- **Responses**: Siempre ResponseModel.from_orm() o dict(tipo=List[EntityOut]).
-- **Tests**: Unit (crud funcs), integration (TestClient endpoints). pytest.mark.asyncio. Auto-run: pre-commit.
-- **Commits**: git diff -- tests si cambias código.
+## Reglas
 
-## Módulos (descripción corta)
-- **src/main.py**: FastAPI app, routers include, CORS/DB deps.
-- **src/core/config.py**: Settings (pydantic-settings), DATABASE_URL, SECRET_KEY.
-- **src/core/security.py**: JWT utils (create/access_token).
-- **src/models/**: SQLModel classes (Contributor, Visit, Photo). Relations 1:N.
-- **src/crud/**: Async CRUD funcs (get_by_rif, create_visit). Usa DbSession.
-- **src/api/v1/**: APIRouters. Deps: auth, CurrentUser. Responses tipadas.
-- **tests/**: conftest.py (TestClient, override_db), test_crud_*.py, test_api_*.py.
-- **alembic/**: Autogenerate migrations: `uv run alembic revision --autogenerate`.
+- **uv only**: `uv add/rm/sync`.
+- Entrypoint: `main.py` (`uv run uvicorn main:app --reload`). No existe `src/main.py`.
+- Schema: `init_db()` hace `create_all`. **No ALTER.** `alembic/` está gitignored: no asumir migraciones versionadas en git.
+- Storage default: `STORAGE_PROVIDER=local`. No reintroducir S3/Supabase como requisito.
+- JWT siempre en routers con `require_operator` / `require_admin`. `REQUIRE_AUTH` en config no se lee en Depends.
+- Bienes = patrimonio institucional. Sin `contributor_id` en el bien.
+- Taquilla nueva: `/call` + `/intake` + `/close`. Close exige nombre y motivo. No usar `/attend`.
+- Alta de visita: contribuyente por **cédula**. `rif`/`name`/`reason` nullable; unique RIF permite NULL. `create_all` no ALTER.
+- Tests: `uv run pytest`. No instalar deps ni commit sin pedido explícito.
 
-## MVP Endpoints (de propuesta)
-- POST /contributors, GET /contributors/?rif=, /:id
-- POST /visits (ingreso+foto), PATCH /visits/:id/exit, GET /visits/?status=
-- GET /dashboard/summary (hoy: totales, en_espera)
+## Módulos actuales
 
-Genera código: "crea crud/contributor.py con get_or_create_by_rif".
+- `main.py`: FastAPI, CORS, `GET /health`, `include_router(..., prefix=/api/v1)`
+- `src/api/v1/`: auth, users, contributors, fiscals, visits, biometrics, assets, dashboard, ws
+- `src/services/`: visit, asset, photo, biometrics (LBPH)
+- `src/infrastructure/storage/local_repository.py`: bloquea `..` y paths absolutos
+- `src/models/`: contributor (`cedula` unique nullable), visit (ticket/called/closed/exit), face_templates, seniat_assets*
+
+Contrato: `docs/api_documentation.md`. Arquitectura: `docs/architecture.md`.

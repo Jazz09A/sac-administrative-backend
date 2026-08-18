@@ -3,7 +3,8 @@ JWT utilities (MVP: básico, activar con REQUIRE_AUTH).
 Última mod: 2026-04-17 09:01 | Changes: create_token, verify (funcionario).
 """
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import Annotated, Optional
+
 import hashlib
 import secrets
 
@@ -85,7 +86,29 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> CurrentUser:
     return user
 
 
-async def require_admin(current_user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
+OPERATOR_ROLES = frozenset({"admin", "user", "gate", "officer", "manager"})
+CurrentUserDep = Annotated[CurrentUser, Depends(get_current_user)]
+
+
+def require_roles(*allowed_roles: str):
+    """Dependencia: el JWT debe tener uno de los roles indicados."""
+    allowed = frozenset(allowed_roles) if allowed_roles else OPERATOR_ROLES
+
+    async def _require(current_user: CurrentUserDep) -> CurrentUser:
+        if current_user.role not in allowed:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Rol no autorizado",
+            )
+        return current_user
+
+    return _require
+
+
+require_operator = require_roles(*sorted(OPERATOR_ROLES))
+
+
+async def require_admin(current_user: CurrentUserDep) -> CurrentUser:
     """Dependencia que requiere que el usuario sea administrador."""
     if current_user.role != "admin":
         raise HTTPException(

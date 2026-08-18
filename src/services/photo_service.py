@@ -1,6 +1,7 @@
 from pathlib import Path
 from uuid import UUID, uuid4
 
+from src.core.image_type import sniff_image_content_type
 from src.domain.repositories.file_storage_repository import FileStorageRepository
 from src.domain.repositories.photo_repository import PhotoRepository
 from src.models.photo import Photo
@@ -28,7 +29,7 @@ class PhotoService:
         content_type: str,
         bucket_name: str | None = None,
     ) -> Photo:
-        self._validate_file(file_data=file_data, content_type=content_type)
+        sniffed_type = self._validate_file(file_data=file_data, content_type=content_type)
 
         safe_name = Path(filename).name or "photo"
         object_key = f"{self.OBJECT_PREFIX}/{visit_id}/{uuid4()}_{safe_name}"
@@ -36,14 +37,14 @@ class PhotoService:
         returned_key = await self.storage_repo.upload(
             file_data=file_data,
             key=object_key,
-            content_type=content_type,
+            content_type=sniffed_type,
         )
         try:
             return await self.photo_repo.create(
                 visit_id=visit_id,
                 object_key=returned_key,
                 bucket=bucket_name,
-                content_type=content_type,
+                content_type=sniffed_type,
                 original_filename=safe_name,
                 size=len(file_data),
             )
@@ -54,10 +55,15 @@ class PhotoService:
     async def list_visit_photos(self, visit_id: UUID) -> list[Photo]:
         return await self.photo_repo.list_by_visit(visit_id)
 
-    def _validate_file(self, *, file_data: bytes, content_type: str) -> None:
+    def _validate_file(self, *, file_data: bytes, content_type: str) -> str:
         if not file_data:
             raise ValueError("La imagen es obligatoria")
         if len(file_data) > self.MAX_FILE_SIZE_BYTES:
             raise ValueError("La imagen supera el limite de 10MB")
-        if content_type not in self.ALLOWED_CONTENT_TYPES:
-            raise ValueError("Formato no permitido. Use JPG, PNG o WEBP")
+        sniffed = sniff_image_content_type(file_data)
+        declared = (content_type or "").split(";", 1)[0].strip().lower()
+        if declared in {"image/jpg", "image/pjpeg"}:
+            declared = "image/jpeg"
+        if declared in self.ALLOWED_CONTENT_TYPES and declared != sniffed:
+            raise ValueError("El tipo declarado no coincide con el contenido de la imagen")
+        return sniffed

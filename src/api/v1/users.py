@@ -47,6 +47,7 @@ async def read_users(
     skip: int = 0,
     limit: int = 100,
     db: AsyncSession = Depends(get_db),
+    _: dict = Depends(require_admin),
 ) -> List[UserPublic]:
     users = await get_users(db, skip=skip, limit=limit)
     return users
@@ -56,6 +57,7 @@ async def read_users(
 async def read_user(
     user_id: UUID,
     db: AsyncSession = Depends(get_db),
+    _: dict = Depends(require_admin),
 ) -> UserPublic:
     user = await get_user_by_id(db, user_id)
     if not user:
@@ -68,6 +70,7 @@ async def update_existing_user(
     user_id: UUID,
     user_in: UserUpdate,
     db: AsyncSession = Depends(get_db),
+    _: dict = Depends(require_admin),
 ) -> UserPublic:
     user = await get_user_by_id(db, user_id)
     if not user:
@@ -84,10 +87,11 @@ async def update_existing_user(
     return updated
 
 
-@router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
 async def delete_existing_user(
     user_id: UUID,
     db: AsyncSession = Depends(get_db),
+    _: dict = Depends(require_admin),
 ) -> None:
     deleted = await delete_user(db, user_id)
     if not deleted:

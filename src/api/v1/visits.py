@@ -3,17 +3,19 @@ API Visits: ingreso/salida MVP.
 Última mod: 2026-04-17 09:03 | Changes: POST/PATCH con filtros.
 """
 from datetime import date, datetime, time, timedelta, timezone
+from typing import Annotated
 from uuid import UUID
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from sqlalchemy import func
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from src.core.config import Settings, get_settings
 from src.core.database import get_db
+from src.core.security import require_admin, require_operator
 from src.infrastructure.postgres.contributor_postgres_repository import (
     PostgresContributorRepository,
 )
@@ -28,9 +30,12 @@ from src.models.visit import (
     FiscalVisitReportItem,
     FiscalVisitsReportResponse,
     Visit,
+    VisitClose,
     VisitCreate,
+    VisitDayMetrics,
     VisitHistoryItem,
     VisitHistoryReportResponse,
+    VisitIntake,
     VisitPublic,
     VisitStatus,
     VisitUpdate,
@@ -39,9 +44,15 @@ from src.models.visit import (
 )
 from src.realtime.visit_ws_manager import visit_ws_manager
 from src.services.photo_service import PhotoService
-from src.services.visit_service import VisitService
+from src.services.visit_service import (
+    ContributorRifConflict,
+    VisitFlowError,
+    VisitService,
+    resolve_visit_list_entry_date,
+)
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_operator)])
+DbSession = Annotated[AsyncSession, Depends(get_db)]
 
 try:
     VENEZUELA_TZ = ZoneInfo("America/Caracas")
@@ -55,9 +66,12 @@ def _venezuela_today() -> date:
 
 
 def _visit_names_update(visit: Visit) -> dict[str, str | None]:
+    contributor = visit.contributor
     return {
         "fiscal_name": visit.fiscal.name if visit.fiscal else None,
-        "contributor_name": visit.contributor.name if visit.contributor else None,
+        "contributor_name": contributor.name if contributor else None,
+        "contributor_cedula": contributor.cedula if contributor else None,
+        "contributor_rif": contributor.rif if contributor else None,
     }
 
 
@@ -167,21 +181,22 @@ async def fiscal_visits_report(
 
 @router.post("/", response_model=VisitWithPhotosPublic, status_code=status.HTTP_201_CREATED)
 async def register_ingreso(
-    contributor_rif: str = Form(...),
-    contributor_name: str = Form(...),
-    fiscal_id: str = Form(...),
-    responsible_person: str = Form(...),
-    reason: str = Form(...),
-    observations: str | None = Form(None),
-    department: str | None = Form(None),
-    file_number: str | None = Form(None),
-    entry_date: date = Form(...),
-    entry_time: time = Form(...),
+    contributor_cedula: str = Form(...),
+    department: str = Form(...),
     photo: UploadFile = File(...),
+    contributor_rif: str | None = Form(None),
+    contributor_name: str | None = Form(None),
+    fiscal_id: str | None = Form(None),
+    responsible_person: str | None = Form(None),
+    reason: str | None = Form(None),
+    observations: str | None = Form(None),
+    file_number: str | None = Form(None),
+    entry_date: date | None = Form(None),
+    entry_time: time | None = Form(None),
     db: AsyncSession = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ) -> VisitWithPhotosPublic:
-    """Registro nuevo ingreso (imagen obligatoria)."""
+    """Registro nuevo ingreso (cédula + foto + departamento; imagen obligatoria)."""
     if not photo.filename:
         raise HTTPException(status_code=400, detail="La imagen es obligatoria")
 
@@ -198,6 +213,7 @@ async def register_ingreso(
         )
 
     visit_in = VisitCreate(
+        contributor_cedula=contributor_cedula,
         contributor_rif=contributor_rif,
         contributor_name=contributor_name,
         fiscal_id=fiscal_id,
@@ -240,6 +256,20 @@ async def register_ingreso(
         if not refreshed_visit:
             raise HTTPException(status_code=404, detail="Visita no encontrada tras actualizar firma")
         visit = refreshed_visit
+    except ContributorRifConflict as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except IntegrityError as exc:
+        origin = exc.orig if exc.orig is not None else exc
+        message = str(origin).lower()
+        if "rif" in message:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="El RIF ya está registrado en otro contribuyente",
+            ) from exc
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Número de ticket duplicado",
+        ) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     finally:
@@ -261,10 +291,12 @@ async def register_ingreso(
 @router.get("/", response_model=list[VisitPublic | VisitWithPhotosPublic])
 async def list_visits(
     contributor_id: int | None = None,
+    cedula: str | None = None,
     rif: str | None = None,
     status: str | None = None,
     fiscal_id: int | None = None,
     entry_date: date | None = None,
+    open: bool = False,
     include_images: bool = Query(
         default=False,
         description="Incluye arreglo photos con photo_url por visita.",
@@ -274,9 +306,12 @@ async def list_visits(
     db: AsyncSession = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ) -> list[VisitPublic | VisitWithPhotosPublic]:
-    """B?squeda historial."""
-    if entry_date is None:
-        entry_date = _venezuela_today()
+    """Búsqueda historial. open=true lista sin exit_at y no aplica default de hoy."""
+    entry_date = resolve_visit_list_entry_date(
+        entry_date=entry_date,
+        open_only=open,
+        today=_venezuela_today(),
+    )
 
     service = VisitService(
         contributor_repo=PostgresContributorRepository(db),
@@ -285,10 +320,12 @@ async def list_visits(
     )
     visits = await service.list(
         contributor_id=contributor_id,
+        cedula=cedula,
         rif=rif,
         status=status,
         fiscal_id=fiscal_id,
         entry_date=entry_date,
+        open_only=open,
         skip=skip,
         limit=limit,
     )
@@ -359,6 +396,38 @@ async def list_visit_history(
     items = [VisitHistoryItem.model_validate(row) for row in rows]
     return VisitHistoryReportResponse(total=total, skip=skip, limit=limit, items=items)
 
+
+@router.get("/queue", response_model=list[VisitPublic])
+async def list_visit_queue(
+    db: DbSession,
+    department: str | None = None,
+) -> list[VisitPublic]:
+    service = VisitService(
+        contributor_repo=PostgresContributorRepository(db),
+        fiscal_repo=PostgresFiscalRepository(db),
+        visit_repo=PostgresVisitRepository(db),
+    )
+    visits = await service.list_queue(department=department)
+    return [
+        VisitPublic.model_validate(visit, update=_visit_names_update(visit))
+        for visit in visits
+    ]
+
+
+@router.get("/metrics", response_model=VisitDayMetrics)
+async def visit_day_metrics(
+    db: DbSession,
+    target_date: date | None = None,
+) -> VisitDayMetrics:
+    if target_date is None:
+        target_date = _venezuela_today()
+    service = VisitService(
+        contributor_repo=PostgresContributorRepository(db),
+        fiscal_repo=PostgresFiscalRepository(db),
+        visit_repo=PostgresVisitRepository(db),
+    )
+    return await service.day_metrics(target_date)
+
 @router.get("/{visit_id}", response_model=VisitPublic | VisitWithPhotosPublic)
 async def get_visit_detail(
     visit_id: UUID,
@@ -411,6 +480,67 @@ async def mark_visit_attended(
     return response
 
 
+@router.patch("/{visit_id}/call", response_model=VisitPublic)
+async def call_visit(visit_id: UUID, db: DbSession) -> VisitPublic:
+    service = VisitService(
+        contributor_repo=PostgresContributorRepository(db),
+        fiscal_repo=PostgresFiscalRepository(db),
+        visit_repo=PostgresVisitRepository(db),
+    )
+    try:
+        visit = await service.call(visit_id)
+    except VisitFlowError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if not visit:
+        raise HTTPException(status_code=404, detail="Visita no encontrada")
+    response = VisitPublic.model_validate(visit, update=_visit_names_update(visit))
+    await visit_ws_manager.publish("visit.called", response)
+    return response
+
+
+@router.patch("/{visit_id}/intake", response_model=VisitPublic)
+async def intake_visit(visit_id: UUID, body: VisitIntake, db: DbSession) -> VisitPublic:
+    service = VisitService(
+        contributor_repo=PostgresContributorRepository(db),
+        fiscal_repo=PostgresFiscalRepository(db),
+        visit_repo=PostgresVisitRepository(db),
+    )
+    try:
+        visit = await service.intake(visit_id, body)
+    except ContributorRifConflict as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except IntegrityError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="El RIF ya está registrado en otro contribuyente",
+        ) from exc
+    except VisitFlowError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if not visit:
+        raise HTTPException(status_code=404, detail="Visita no encontrada")
+    response = VisitPublic.model_validate(visit, update=_visit_names_update(visit))
+    await visit_ws_manager.publish("visit.updated", response)
+    return response
+
+
+@router.patch("/{visit_id}/close", response_model=VisitPublic)
+async def close_visit(visit_id: UUID, body: VisitClose, db: DbSession) -> VisitPublic:
+    service = VisitService(
+        contributor_repo=PostgresContributorRepository(db),
+        fiscal_repo=PostgresFiscalRepository(db),
+        visit_repo=PostgresVisitRepository(db),
+    )
+    try:
+        visit = await service.close(visit_id, body)
+    except VisitFlowError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if not visit:
+        raise HTTPException(status_code=404, detail="Visita no encontrada")
+    response = VisitPublic.model_validate(visit, update=_visit_names_update(visit))
+    await visit_ws_manager.publish("visit.closed", response)
+    return response
+
+
 @router.patch("/{visit_id}", response_model=VisitPublic)
 async def update_visit(
     visit_id: UUID, visit_data: VisitUpdate, db: AsyncSession = Depends(get_db)
@@ -438,15 +568,18 @@ async def update_visit(
 async def register_salida(
     visit_id: UUID, exit_data: VisitUpdateExit, db: AsyncSession = Depends(get_db)
 ) -> VisitPublic:
-    """Actualiza salida (solo si espera)."""
+    """Registra salida desde espera/en_atencion/atendido/incompleto/remitido."""
     service = VisitService(
         contributor_repo=PostgresContributorRepository(db),
         fiscal_repo=PostgresFiscalRepository(db),
         visit_repo=PostgresVisitRepository(db),
     )
-    visit = await service.register_exit(visit_id, exit_data)
+    try:
+        visit = await service.register_exit(visit_id, exit_data)
+    except VisitFlowError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     if not visit:
-        raise HTTPException(status_code=400, detail="No se puede registrar salida")
+        raise HTTPException(status_code=404, detail="Visita no encontrada")
     response = VisitPublic.model_validate(
         visit,
         update=_visit_names_update(visit),
@@ -455,9 +588,11 @@ async def register_salida(
     return response
 
 
-@router.delete("/{visit_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{visit_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
 async def delete_visit(
-    visit_id: UUID, db: AsyncSession = Depends(get_db)
+    visit_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    _: object = Depends(require_admin),
 ) -> None:
     """Borrado logico de visita (soft delete)."""
     service = VisitService(

@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.database import get_db
+from src.core.security import require_operator
 from src.crud.contributors import (
     get_contributors, get_contributor, create_contributor, update_contributor,
     get_contributor_by_rif
@@ -17,7 +18,7 @@ from src.models.contributor import (
 from sqlmodel import select
 from src.models.visit import Visit
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_operator)])
 
 @router.post("/", response_model=ContributorPublic, status_code=status.HTTP_201_CREATED)
 async def create_new_contributor(

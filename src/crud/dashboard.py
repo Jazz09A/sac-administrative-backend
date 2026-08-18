@@ -4,12 +4,14 @@ Dashboard avanzado MVP.
 """
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Dict, Optional
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import func, extract
-from sqlmodel import select
-from src.models.visit import Visit, VisitStatus
-from src.models.contributor import Contributor
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+from sqlalchemy import extract, func
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import select
+
+from src.models.contributor import Contributor
+from src.models.visit import ON_PREMISES_STATUSES, Visit, VisitStatus
 
 try:
     VENEZUELA_TZ = ZoneInfo("America/Caracas")
@@ -29,10 +31,10 @@ async def get_advanced_dashboard(session: AsyncSession, target_date: Optional[da
     today_filter = (Visit.entry_date == target_date, Visit.deleted_at.is_(None))
     yesterday_filter = (Visit.entry_date == yesterday, Visit.deleted_at.is_(None))
     
-    # 1. Visitas en curso (status espera/atendido sin salida)
+    # 1. Visitas en curso (aún en sede, sin salida)
     en_curso = select(func.count()).where(
         *today_filter,
-        Visit.status.in_([VisitStatus.ESPERA, VisitStatus.ATENDIDO]),
+        Visit.status.in_(ON_PREMISES_STATUSES),
         Visit.exit_date.is_(None)
     )
     
@@ -52,13 +54,13 @@ async def get_advanced_dashboard(session: AsyncSession, target_date: Optional[da
     prev_hour = now_hour - 1
     dentro_actual = select(func.count()).where(
         *today_filter,
-        Visit.status.in_([VisitStatus.ESPERA, VisitStatus.ATENDIDO]),
+        Visit.status.in_(ON_PREMISES_STATUSES),
         Visit.exit_date.is_(None),
         extract('hour', Visit.entry_time) <= now_hour
     )
     dentro_prev = select(func.count()).where(
         *today_filter,
-        Visit.status.in_([VisitStatus.ESPERA, VisitStatus.ATENDIDO]),
+        Visit.status.in_(ON_PREMISES_STATUSES),
         Visit.exit_date.is_(None),
         extract('hour', Visit.entry_time) <= prev_hour
     )

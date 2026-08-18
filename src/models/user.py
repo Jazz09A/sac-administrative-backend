@@ -24,7 +24,10 @@ class UserBase(SQLModel):
 
 class UserCreate(UserBase):
     password: str = PydanticField(..., min_length=8, max_length=256)
-    role: Optional[str] = PydanticField(default="user", pattern="^(admin|user)$")
+    role: Optional[str] = PydanticField(
+        default="user",
+        pattern="^(admin|user|gate|officer|manager)$",
+    )
 
 
 class UserUpdate(SQLModel):
@@ -32,7 +35,10 @@ class UserUpdate(SQLModel):
     email: Optional[str] = PydanticField(default=None, max_length=255)
     password: Optional[str] = PydanticField(default=None, min_length=8, max_length=256)
     is_active: Optional[bool] = None
-    role: Optional[str] = PydanticField(default=None, pattern="^(admin|user)$")
+    role: Optional[str] = PydanticField(
+        default=None,
+        pattern="^(admin|user|gate|officer|manager)$",
+    )
 
 
 class UserPublic(UserBase):
